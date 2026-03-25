@@ -1,0 +1,369 @@
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\serializers.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 18, 2026 - 17:44:49
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\views.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 18, 2026 - 18:35:07
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\views.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 18, 2026 - 18:35:33
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\urls.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 18, 2026 - 18:36:02
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\serializers.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 18, 2026 - 18:36:21
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\serializers.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 18, 2026 - 19:28:00
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+[18/Mar/2026 19:52:48] "POST /api/users/student/submissions/ HTTP/1.1" 201 295
+[18/Mar/2026 19:52:48] "GET /api/users/classes/ HTTP/1.1" 200 360
+[18/Mar/2026 19:52:48] "GET /api/users/student/exercises/ HTTP/1.1" 200 264
+[18/Mar/2026 19:52:48] "GET /api/users/student/submissions/ HTTP/1.1" 200 297
+[18/Mar/2026 19:53:33] "POST /api/users/logout/ HTTP/1.1" 200 36
+[18/Mar/2026 19:53:55] "POST /api/users/login/ HTTP/1.1" 200 129
+[18/Mar/2026 19:53:55] "GET /api/users/teacher/submissions/ HTTP/1.1" 200 339
+[18/Mar/2026 19:53:55] "GET /api/users/teacher/exercises/ HTTP/1.1" 200 264
+[18/Mar/2026 19:53:55] "GET /api/users/teacher/classes/ HTTP/1.1" 200 360
+[18/Mar/2026 19:53:56] "GET /api/users/teacher/exercises/ HTTP/1.1" 200 264
+[18/Mar/2026 19:53:56] "GET /api/users/teacher/classes/ HTTP/1.1" 200 360
+[18/Mar/2026 19:53:56] "GET /api/users/teacher/submissions/ HTTP/1.1" 200 339
+[18/Mar/2026 19:54:02] "GET /api/users/submissions/1/download/ HTTP/1.1" 200 344968
+[18/Mar/2026 19:56:57] "POST /api/users/logout/ HTTP/1.1" 200 36
+[21/Mar/2026 14:45:36] "OPTIONS /api/users/login/ HTTP/1.1" 200 0
+[21/Mar/2026 14:45:39] "POST /api/users/login/ HTTP/1.1" 200 129
+[21/Mar/2026 14:45:40] "GET /api/users/teacher/exercises/ HTTP/1.1" 200 264
+[21/Mar/2026 14:45:40] "GET /api/users/teacher/submissions/ HTTP/1.1" 200 339
+[21/Mar/2026 14:45:40] "GET /api/users/teacher/exercises/ HTTP/1.1" 200 264
+[21/Mar/2026 14:45:40] "GET /api/users/teacher/classes/ HTTP/1.1" 200 360
+[21/Mar/2026 14:45:40] "GET /api/users/teacher/submissions/ HTTP/1.1" 200 339
+[21/Mar/2026 14:45:40] "GET /api/users/teacher/classes/ HTTP/1.1" 200 360
+C:\Users\HP\school_project\school_backend\users\views.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 18, 2026 - 19:51:55
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\views.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 21, 2026 - 14:55:24
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\urls.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 21, 2026 - 14:55:36
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\models.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 21, 2026 - 14:56:15
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\serializers.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 21, 2026 - 15:30:07
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\serializers.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 21, 2026 - 15:30:24
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\views.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 21, 2026 - 15:30:36
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\views.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 21, 2026 - 15:30:54
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\users\urls.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 21, 2026 - 15:31:03
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+C:\Users\HP\school_project\school_backend\school_backend\settings.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 21, 2026 - 15:31:26
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+Exception in thread django-main-thread:
+Traceback (most recent call last):
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 64, in wrapper
+    fn(*args, **kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\core\management\commands\runserver.py", line 124, in inner_run
+    autoreload.raise_last_exception()
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 86, in raise_last_exception
+    raise _exception[1]
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\core\management\__init__.py", line 394, in execute
+    autoreload.check_errors(django.setup)()
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 64, in wrapper
+    fn(*args, **kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\__init__.py", line 24, in setup
+    apps.populate(settings.INSTALLED_APPS)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\apps\registry.py", line 91, in populate
+    app_config = AppConfig.create(entry)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\apps\config.py", line 193, in create
+    import_module(entry)
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\importlib\__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1004, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'channels'
+C:\Users\HP\school_project\school_backend\school_backend\settings.py changed, reloading.
+Watching for file changes with StatReloader
+Exception in thread django-main-thread:
+Traceback (most recent call last):
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 64, in wrapper
+    fn(*args, **kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\core\management\commands\runserver.py", line 124, in inner_run
+    autoreload.raise_last_exception()
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 86, in raise_last_exception
+    raise _exception[1]
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\core\management\__init__.py", line 394, in execute
+    autoreload.check_errors(django.setup)()
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 64, in wrapper
+    fn(*args, **kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\__init__.py", line 24, in setup
+    apps.populate(settings.INSTALLED_APPS)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\apps\registry.py", line 91, in populate
+    app_config = AppConfig.create(entry)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\apps\config.py", line 193, in create
+    import_module(entry)
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\importlib\__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1004, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'channels'
+ne 394, in execute
+    autoreload.check_errors(django.setup)()
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 64, in wrapper
+    fn(*args, **kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\__init__.py", line 24, in setup
+    apps.populate(settings.INSTALLED_APPS)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\apps\registry.py", line 91, in populate
+    app_config = AppConfig.create(entry)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\apps\config.py", line 193, in create
+    import_module(entry)
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\importlib\__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1004, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'channels'
+
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 21, 2026 - 15:31:26
+Django version 5.2.11, using settings 'school_backend.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/
+Watching for file changes with StatReloader
+Exception in thread django-main-thread:
+Traceback (most recent call last):
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 64, in wrapper
+    fn(*args, **kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\core\management\commands\runserver.py", line 124, in inner_run
+    autoreload.raise_last_exception()
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 86, in raise_last_exception
+    raise _exception[1]
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\core\management\__init__.py", line 394, in execute
+    autoreload.check_errors(django.setup)()
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 64, in wrapper
+    fn(*args, **kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\__init__.py", line 24, in setup
+    apps.populate(settings.INSTALLED_APPS)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\apps\registry.py", line 91, in populate
+    app_config = AppConfig.create(entry)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\apps\config.py", line 193, in create
+    import_module(entry)
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\importlib\__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1004, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'channels'
+C:\Users\HP\school_project\school_backend\school_backend\settings.py changed, reloading.
+Watching for file changes with StatReloader
+Exception in thread django-main-thread:
+Traceback (most recent call last):
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 64, in wrapper
+    fn(*args, **kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\core\management\commands\runserver.py", line 124, in inner_run
+    autoreload.raise_last_exception()
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 86, in raise_last_exception
+    raise _exception[1]
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\core\management\__init__.py", line 394, in execute
+    autoreload.check_errors(django.setup)()
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\utils\autoreload.py", line 64, in wrapper
+    fn(*args, **kwargs)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\__init__.py", line 24, in setup
+    apps.populate(settings.INSTALLED_APPS)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\apps\registry.py", line 91, in populate
+    app_config = AppConfig.create(entry)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\apps\config.py", line 193, in create
+    import_module(entry)
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\importlib\__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1004, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'channels'
+stry.py", line 91, in populate
+    app_config = AppConfig.create(entry)
+  File "C:\Users\HP\school_project\school_backend\.venv\lib\site-packages\django\apps\config.py", line 193, in create
+    import_module(entry)
+  File "C:\Users\HP\AppData\Local\Programs\Python\Python310\lib\importlib\__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1004, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'channels'

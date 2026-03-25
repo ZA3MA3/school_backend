@@ -2,12 +2,20 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth import authenticate
+from django.http import FileResponse
+from django.shortcuts import get_object_or_404
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from django.conf import settings
-from .serializers import LoginSerializer
-from .models import User
+from django.utils import timezone
+from django.db import models
+from django.core.cache import cache
+import secrets
+from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer
+from .models import User, Class, Exercise, ExerciseSubmission, Student, Teacher, Parent, Message, Announcement
+
 
 
 class LoginView(APIView):
@@ -21,10 +29,11 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        username = serializer.validated_data['username']
+        email = serializer.validated_data['email']
         password = serializer.validated_data['password']
 
-        user = authenticate(request, username=username, password=password)
+        # Authenticate using email as the username field
+        user = authenticate(request, username=email, password=password)
 
         if user is not None:
             refresh = RefreshToken.for_user(user)
@@ -35,34 +44,32 @@ class LoginView(APIView):
             response = Response({
                 'user': {
                     'id': user.id,
-                    'username': user.username,
-                    'email': user.email if hasattr(user, 'email') else None,
-                    'first_name': user.first_name if hasattr(user, 'first_name') else None,
-                    'last_name': user.last_name if hasattr(user, 'last_name') else None,
+                    'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
+                    'full_name': user.get_full_name,
                 },
                 'role': user.role
             })
             
-            # Set HttpOnly cookies
-            # Access token cookie
+            # Set HttpOnly cookies (for API auth)
             response.set_cookie(
                 key='access_token',
                 value=access_token,
                 httponly=True,
-                secure=not settings.DEBUG,  # Secure in production
+                secure=not settings.DEBUG,
                 samesite='Lax',
-                max_age=3600,  # 1 hour
+                max_age=3600,
                 path='/'
             )
             
-            # Refresh token cookie
             response.set_cookie(
                 key='refresh_token',
                 value=refresh_token,
                 httponly=True,
                 secure=not settings.DEBUG,
                 samesite='Lax',
-                max_age=7 * 24 * 3600,  # 7 days
+                max_age=7 * 24 * 3600,
                 path='/'
             )
             
@@ -74,24 +81,17 @@ class LoginView(APIView):
             )
 
 
-
-
-
-
-
 class LogoutView(APIView):
     """
     Logout endpoint that clears JWT cookies.
     """
     permission_classes = []
     authentication_classes = []
+    
     def post(self, request):
         response = Response({'detail': 'Successfully logged out'})
-        
-        # Delete cookies
         response.delete_cookie('access_token', path='/')
         response.delete_cookie('refresh_token', path='/')
-        
         return response
 
 
@@ -105,10 +105,10 @@ class CurrentUserView(APIView):
         user = request.user
         return Response({
             'id': user.id,
-            'username': user.username,
-            'email': user.email if hasattr(user, 'email') else None,
-            'first_name': user.first_name if hasattr(user, 'first_name') else None,
-            'last_name': user.last_name if hasattr(user, 'last_name') else None,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'full_name': user.get_full_name,
             'role': user.role
         })
 
@@ -134,12 +134,19 @@ class RefreshTokenView(APIView):
             access_token = str(refresh.access_token)
             
             response = Response({'detail': 'Token refreshed'})
-            
-            # Set new access token cookie
             response.set_cookie(
                 key='access_token',
                 value=access_token,
                 httponly=True,
+                secure=not settings.DEBUG,
+                samesite='Lax',
+                max_age=3600,
+                path='/'
+            )
+            response.set_cookie(
+                key='ws_token',
+                value=access_token,
+                httponly=False,
                 secure=not settings.DEBUG,
                 samesite='Lax',
                 max_age=3600,
@@ -153,3 +160,464 @@ class RefreshTokenView(APIView):
                 {'detail': 'Invalid or expired refresh token'}, 
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+class TeacherClassesView(APIView):
+    """
+    Get all classes taught by the current teacher
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        if request.user.role != 'TEACHER':
+            return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            teacher = Teacher.objects.get(pk=request.user.id)
+        except Teacher.DoesNotExist:
+            return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        classes = Class.objects.filter(teacher=teacher)
+        serializer = ClassSerializer(classes, many=True)
+        return Response(serializer.data)
+
+
+class TeacherExercisesView(APIView):
+    """
+    Create exercise or list exercises for teacher's classes
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    
+    def get(self, request):
+        if request.user.role != 'TEACHER':
+            return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            teacher = Teacher.objects.get(pk=request.user.id)
+        except Teacher.DoesNotExist:
+            return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        exercises = Exercise.objects.filter(teacher=teacher)
+        serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
+        return Response(serializer.data)
+    
+    def post(self, request):
+        if request.user.role != 'TEACHER':
+            return Response({'detail': 'Only teachers can create exercises'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            teacher = Teacher.objects.get(pk=request.user.id)
+        except Teacher.DoesNotExist:
+            return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = ExerciseSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save(teacher=teacher)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AllClassesView(APIView):
+    """
+    Get all available classes (for students to browse and enroll)
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        if request.user.role != 'STUDENT':
+            return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        classes = Class.objects.all()
+        serializer = ClassSerializer(classes, many=True)
+        return Response(serializer.data)
+
+
+class StudentEnrollView(APIView):
+    """
+    Enroll a student in a class
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        if request.user.role != 'STUDENT':
+            return Response({'detail': 'Only students can enroll'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            student = Student.objects.get(pk=request.user.id)
+        except Student.DoesNotExist:
+            return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        class_id = request.data.get('class_id')
+        if not class_id:
+            return Response({'detail': 'class_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            class_obj = Class.objects.get(id=class_id)
+        except Class.DoesNotExist:
+            return Response({'detail': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if already enrolled
+        if student.enrolled_classes.filter(id=class_id).exists():
+            return Response({'detail': 'Already enrolled in this class'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Enroll the student
+        student.enrolled_classes.add(class_obj)
+        
+        return Response({
+            'detail': 'Successfully enrolled',
+            'class_id': class_id,
+            'class_name': class_obj.name
+        }, status=status.HTTP_201_CREATED)
+
+
+class StudentExercisesView(APIView):
+    """
+    Get exercises for classes a student is enrolled in
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        if request.user.role != 'STUDENT':
+            return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            student = Student.objects.get(pk=request.user.id)
+        except Student.DoesNotExist:
+            return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Get all exercises from classes the student is enrolled in
+        exercises = Exercise.objects.filter(related_class__in=student.enrolled_classes.all())
+        serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class StudentSubmissionView(APIView):
+    """
+    Submit an exercise or view submissions
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    
+    def get(self, request):
+        if request.user.role != 'STUDENT':
+            return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            student = Student.objects.get(pk=request.user.id)
+        except Student.DoesNotExist:
+            return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        submissions = ExerciseSubmission.objects.filter(student=student)
+        serializer = ExerciseSubmissionSerializer(submissions, many=True)
+        return Response(serializer.data)
+    
+    def post(self, request):
+        if request.user.role != 'STUDENT':
+            return Response({'detail': 'Only students can submit exercises'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            student = Student.objects.get(pk=request.user.id)
+        except Student.DoesNotExist:
+            return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = ExerciseSubmissionSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(student=student)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class TeacherSubmissionsView(APIView):
+    """
+    Get all submissions for exercises created by the teacher
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        if request.user.role != 'TEACHER':
+            return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            teacher = Teacher.objects.get(pk=request.user.id)
+        except Teacher.DoesNotExist:
+            return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Get all exercises created by this teacher
+        teacher_exercises = Exercise.objects.filter(teacher=teacher)
+        
+        # Get all submissions for these exercises
+        submissions = ExerciseSubmission.objects.filter(exercise__in=teacher_exercises)
+        serializer = ExerciseSubmissionSerializer(submissions, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class ParentChildrenView(APIView):
+    """
+    Get all children linked to the current parent
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        if request.user.role != 'PARENT':
+            return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            parent = Parent.objects.get(pk=request.user.id)
+        except Parent.DoesNotExist:
+            return Response({'detail': 'Parent profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        children = Student.objects.filter(parent_user=parent)
+        from .serializers import StudentSerializer
+        serializer = StudentSerializer(children, many=True)
+        return Response(serializer.data)
+
+
+class DownloadExerciseView(APIView):
+    """
+    Download an exercise file
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, exercise_id):
+        exercise = get_object_or_404(Exercise, id=exercise_id)
+        
+        if exercise.file_path:
+            file_path = exercise.file_path.path
+            return FileResponse(
+                open(file_path, 'rb'),
+                as_attachment=True,
+                filename=exercise.file_path.name.split('/')[-1]
+            )
+        
+        return Response({'detail': 'No file attached to this exercise'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class DownloadSubmissionView(APIView):
+    """
+    Download a student's submission file
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, submission_id):
+        submission = get_object_or_404(ExerciseSubmission, id=submission_id)
+        
+        # Check if user is the teacher who created the exercise or the student who submitted
+        is_teacher = hasattr(request.user, 'role') and request.user.role == 'TEACHER'
+        is_student = hasattr(request.user, 'role') and request.user.role == 'STUDENT'
+        is_owner = submission.student.id == request.user.id if is_student else False
+        is_exercise_teacher = submission.exercise.teacher.id == request.user.id if is_teacher else False
+        
+        if not (is_owner or is_exercise_teacher):
+            return Response({'detail': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        
+        if submission.submission_file:
+            file_path = submission.submission_file.path
+            return FileResponse(
+                open(file_path, 'rb'),
+                as_attachment=True,
+                filename=submission.submission_file.name.split('/')[-1]
+            )
+        
+        return Response({'detail': 'No file submitted'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class GradeSubmissionView(APIView):
+    """
+    Grade a student's submission
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def patch(self, request, submission_id):
+        if request.user.role != 'TEACHER':
+            return Response({'detail': 'Only teachers can grade submissions'}, status=status.HTTP_403_FORBIDDEN)
+        
+        submission = get_object_or_404(ExerciseSubmission, id=submission_id)
+        
+        # Verify the teacher owns this exercise
+        if submission.exercise.teacher.id != request.user.id:
+            return Response({'detail': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        
+        grade = request.data.get('grade')
+        feedback = request.data.get('feedback', '')
+        
+        if grade is None:
+            return Response({'detail': 'Grade is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            grade_value = float(grade)
+            if grade_value < 0 or grade_value > 20:
+                return Response({'detail': 'Grade must be between 0 and 20'}, status=status.HTTP_400_BAD_REQUEST)
+        except (ValueError, TypeError):
+            return Response({'detail': 'Invalid grade value'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        submission.grade = grade_value
+        submission.feedback = feedback
+        submission.graded_at = timezone.now()
+        submission.save()
+        
+        serializer = ExerciseSubmissionSerializer(submission)
+        return Response(serializer.data)
+
+
+class ChatContactsView(APIView):
+    """
+    Get contacts for chat (Parents for teachers, Teachers for parents)
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        if request.user.role == 'TEACHER':
+            contacts = Parent.objects.all()
+            from .serializers import ParentSerializer
+            serializer = ParentSerializer(contacts, many=True)
+        elif request.user.role == 'PARENT':
+            contacts = Teacher.objects.all()
+            from .serializers import TeacherSerializer
+            serializer = TeacherSerializer(contacts, many=True)
+        else:
+            return Response({'detail': 'Only teachers and parents can access contacts'}, status=status.HTTP_403_FORBIDDEN)
+        
+        return Response(serializer.data)
+
+
+class ChatMessagesView(APIView):
+    """
+    Get messages between current user and a specific contact
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, contact_id):
+        user = request.user
+        
+        # Get messages where user is sender or receiver with this contact
+        messages = Message.objects.filter(
+            (models.Q(sender=user) & models.Q(receiver_id=contact_id)) |
+            (models.Q(sender_id=contact_id) & models.Q(receiver=user))
+        ).order_by('created_at')
+        
+        # Mark messages as read
+        messages.filter(receiver=user, is_read=False).update(is_read=True)
+        
+        serializer = MessageSerializer(messages, many=True)
+        return Response(serializer.data)
+    
+    def post(self, request, contact_id):
+        user = request.user
+        
+        # Validate that contact exists
+        try:
+            User.objects.get(id=contact_id)
+        except User.DoesNotExist:
+            return Response({'detail': 'Contact not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        content = request.data.get('content')
+        if not content:
+            return Response({'detail': 'Content is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        message = Message.objects.create(
+            sender=user,
+            receiver_id=contact_id,
+            content=content
+        )
+        
+        serializer = MessageSerializer(message)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class WSTicketView(APIView):
+    """
+    Generate a one-time WebSocket ticket for authenticated users.
+    """
+    def post(self, request):
+        ticket = secrets.token_urlsafe(32)
+        cache_key = f"ws_ticket:{ticket}"
+        cache.set(cache_key, request.user.id, timeout=30)
+        return Response({'ticket': ticket})
+
+
+class TeacherAnnouncementView(APIView):
+    """
+    Get all announcements created by the current teacher, or create a new one
+    """
+    def get(self, request):
+        if request.user.role != 'TEACHER':
+            return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            teacher = Teacher.objects.get(id=request.user.id)
+        except Teacher.DoesNotExist:
+            return Response({'detail': 'Teacher not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        announcements = Announcement.objects.filter(teacher=teacher)
+        serializer = AnnouncementSerializer(announcements, many=True)
+        return Response(serializer.data)
+    
+    def post(self, request):
+        if request.user.role != 'TEACHER':
+            return Response({'detail': 'Only teachers can create announcements'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            teacher = Teacher.objects.get(id=request.user.id)
+        except Teacher.DoesNotExist:
+            return Response({'detail': 'Teacher not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = AnnouncementSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(teacher=teacher)
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class StudentAnnouncementView(APIView):
+    """
+    Get all announcements for the current student's enrolled classes
+    """
+    def get(self, request):
+        if request.user.role != 'STUDENT':
+            return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            student = Student.objects.get(id=request.user.id)
+        except Student.DoesNotExist:
+            return Response({'detail': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        enrolled_classes = student.enrolled_classes.all()
+        announcements = Announcement.objects.filter(
+            models.Q(related_class__in=enrolled_classes) | models.Q(related_class__isnull=True, teacher__classes_taught__in=enrolled_classes)
+        ).distinct()
+        
+        serializer = AnnouncementSerializer(announcements, many=True)
+        return Response(serializer.data)
+
+
+class ParentAnnouncementView(APIView):
+    """
+    Get all announcements for children of the current parent
+    """
+    def get(self, request):
+        if request.user.role != 'PARENT':
+            return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            parent = Parent.objects.get(id=request.user.id)
+        except Parent.DoesNotExist:
+            return Response({'detail': 'Parent not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        children = parent.children.all()
+        enrolled_classes = Class.objects.filter(students__in=children)
+        
+        announcements = []
+        for child in children:
+            child_classes = child.enrolled_classes.all()
+            child_announcements = Announcement.objects.filter(
+                models.Q(related_class__in=child_classes) | models.Q(related_class__isnull=True, teacher__classes_taught__in=child_classes)
+            ).distinct()
+            
+            for ann in child_announcements:
+                announcements.append({
+                    'child_name': child.get_full_name,
+                    'announcement': AnnouncementSerializer(ann).data
+                })
+        
+        return Response(announcements)
