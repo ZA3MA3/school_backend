@@ -96,7 +96,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 await self.send(text_data=json.dumps({
                     'type': 'new_message',
                     'message': message_data
-                }))
+        }))
+
+    async def chat_unread_update(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'chat_unread_update',
+            'count': event.get('count', 0),
+            'contact_id': event.get('contact_id')
+        }))
     
     @database_sync_to_async
     def save_message(self, receiver_id, content):
@@ -107,10 +114,81 @@ class ChatConsumer(AsyncWebsocketConsumer):
             receiver=receiver,
             content=content
         )
+        
+        # Send chat unread count update to receiver
+        from users.views import send_chat_unread_update
+        send_chat_unread_update(receiver_id)
+        
         return message
     
     async def chat_message(self, event):
         await self.send(text_data=json.dumps({
             'type': 'new_message',
             'message': event['message']
+        }))
+
+
+class NotificationConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        ticket = None
+        query_string = self.scope.get('query_string', b'').decode()
+        
+        for param in query_string.split('&'):
+            if param.startswith('ticket='):
+                ticket = param.split('=', 1)[1]
+                break
+        
+        if not ticket:
+            logger.warning("Notification WebSocket connection rejected - no ticket")
+            await self.close()
+            return
+        
+        cache_key = f"ws_ticket:{ticket}"
+        user_id = cache.get(cache_key)
+        
+        if not user_id:
+            logger.warning("Notification WebSocket connection rejected - invalid or expired ticket")
+            await self.close()
+            return
+        
+        cache.delete(cache_key)
+        
+        try:
+            self.user = await self.get_user(user_id)
+        except User.DoesNotExist:
+            logger.warning("Notification WebSocket connection rejected - user not found")
+            await self.close()
+            return
+        
+        self.notification_group_name = f"notifications_{self.user.id}"
+        
+        await self.channel_layer.group_add(
+            self.notification_group_name,
+            self.channel_name
+        )
+        
+        await self.accept()
+        logger.info(f"Notification WebSocket connected - user: {self.user.email}")
+    
+    @database_sync_to_async
+    def get_user(self, user_id):
+        return User.objects.get(id=user_id)
+    
+    async def disconnect(self, close_code):
+        if hasattr(self, 'notification_group_name'):
+            await self.channel_layer.group_discard(
+                self.notification_group_name,
+                self.channel_name
+            )
+    
+    async def notification_update(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'notification_update',
+            'count': event.get('count', 0)
+        }))
+    
+    async def chat_unread_update(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'chat_unread_update',
+            'count': event.get('count', 0)
         }))

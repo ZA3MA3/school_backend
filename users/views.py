@@ -12,9 +12,47 @@ from django.conf import settings
 from django.utils import timezone
 from django.db import models
 from django.core.cache import cache
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 import secrets
-from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer
-from .models import User, Class, Exercise, ExerciseSubmission, Student, Teacher, Parent, Message, Announcement
+from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer, AttendanceSerializer, NotificationSerializer
+from .models import User, Class, Exercise, ExerciseSubmission, Student, Teacher, Parent, Message, Announcement, Attendance, Notification
+
+
+def send_notification_update(user_id):
+    """
+    Send WebSocket notification update to a user
+    """
+    try:
+        channel_layer = get_channel_layer()
+        count = Notification.objects.filter(recipient_id=user_id, is_read=False).count()
+        async_to_sync(channel_layer.group_send)(
+            f"notifications_{user_id}",
+            {
+                'type': 'notification_update',
+                'count': count
+            }
+        )
+    except Exception:
+        pass
+
+
+def send_chat_unread_update(user_id):
+    """
+    Send WebSocket chat unread count update to a user
+    """
+    try:
+        channel_layer = get_channel_layer()
+        count = Message.objects.filter(receiver_id=user_id, is_read=False).count()
+        async_to_sync(channel_layer.group_send)(
+            f"notifications_{user_id}",
+            {
+                'type': 'chat_unread_update',
+                'count': count
+            }
+        )
+    except Exception:
+        pass
 
 
 
@@ -213,7 +251,19 @@ class TeacherExercisesView(APIView):
         
         serializer = ExerciseSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save(teacher=teacher)
+            exercise = serializer.save(teacher=teacher)
+            
+            # Create notifications for students in the class
+            if exercise.related_class:
+                students = exercise.related_class.students.all()
+                for student in students:
+                    Notification.objects.create(
+                        recipient=student,
+                        type='EXERCISE',
+                        message=f"New exercise uploaded: {exercise.title} in {exercise.related_class.name}"
+                    )
+                    send_notification_update(student.id)
+            
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -456,6 +506,27 @@ class GradeSubmissionView(APIView):
         submission.graded_at = timezone.now()
         submission.save()
         
+        # Create notification for student
+        Notification.objects.create(
+            recipient=submission.student,
+            type='GRADE',
+            message=f"Your submission for {submission.exercise.title} has been graded: {grade_value}/20"
+        )
+        send_notification_update(submission.student.id)
+        
+        # Create notification for parent if exists
+        try:
+            student = Student.objects.get(id=submission.student.id)
+            if student.parent_user:
+                Notification.objects.create(
+                    recipient=student.parent_user,
+                    type='GRADE',
+                    message=f"{student.get_full_name}'s submission for {submission.exercise.title} has been graded: {grade_value}/20"
+                )
+                send_notification_update(student.parent_user.id)
+        except Student.DoesNotExist:
+            pass
+        
         serializer = ExerciseSubmissionSerializer(submission)
         return Response(serializer.data)
 
@@ -521,6 +592,9 @@ class ChatMessagesView(APIView):
             content=content
         )
         
+        # Send chat unread count update to receiver
+        send_chat_unread_update(contact_id)
+        
         serializer = MessageSerializer(message)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -534,6 +608,41 @@ class WSTicketView(APIView):
         cache_key = f"ws_ticket:{ticket}"
         cache.set(cache_key, request.user.id, timeout=30)
         return Response({'ticket': ticket})
+
+
+class ChatUnreadCountView(APIView):
+    """
+    Get unread message counts for the current user
+    """
+    def get(self, request):
+        user = request.user
+        
+        # Get contacts based on user role
+        if user.role == 'TEACHER':
+            contacts = Parent.objects.all()
+        elif user.role == 'PARENT':
+            contacts = Teacher.objects.all()
+        else:
+            return Response({'detail': 'Only teachers and parents can access contacts'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Get unread counts per contact
+        contact_counts = {}
+        for contact in contacts:
+            count = Message.objects.filter(
+                sender=contact,
+                receiver=user,
+                is_read=False
+            ).count()
+            if count > 0:
+                contact_counts[contact.id] = count
+        
+        # Get total unread count
+        total_unread = Message.objects.filter(receiver=user, is_read=False).count()
+        
+        return Response({
+            'contact_counts': contact_counts,
+            'total_unread': total_unread
+        })
 
 
 class TeacherAnnouncementView(APIView):
@@ -564,7 +673,54 @@ class TeacherAnnouncementView(APIView):
         
         serializer = AnnouncementSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(teacher=teacher)
+        announcement = serializer.save(teacher=teacher)
+        
+        # Create notifications for students
+        notified_students = set()
+        notified_parents = set()
+        
+        if announcement.related_class:
+            students = announcement.related_class.students.all().distinct()
+            for student in students:
+                if student.id not in notified_students:
+                    Notification.objects.create(
+                        recipient=student,
+                        type='ANNOUNCEMENT',
+                        message=f"New announcement: {announcement.title}"
+                    )
+                    send_notification_update(student.id)
+                    notified_students.add(student.id)
+                    
+                    if student.parent_user and student.parent_user.id not in notified_parents:
+                        Notification.objects.create(
+                            recipient=student.parent_user,
+                            type='ANNOUNCEMENT',
+                            message=f"New announcement for {student.get_full_name}: {announcement.title}"
+                        )
+                        send_notification_update(student.parent_user.id)
+                        notified_parents.add(student.parent_user.id)
+        else:
+            # Notify all students in teacher's classes
+            classes = Class.objects.filter(teacher=teacher)
+            for cls in classes:
+                for student in cls.students.all():
+                    if student.id not in notified_students:
+                        Notification.objects.create(
+                            recipient=student,
+                            type='ANNOUNCEMENT',
+                            message=f"New announcement: {announcement.title}"
+                        )
+                        send_notification_update(student.id)
+                        notified_students.add(student.id)
+                        
+                        if student.parent_user and student.parent_user.id not in notified_parents:
+                            Notification.objects.create(
+                                recipient=student.parent_user,
+                                type='ANNOUNCEMENT',
+                                message=f"New announcement for {student.get_full_name}: {announcement.title}"
+                            )
+                            send_notification_update(student.parent_user.id)
+                            notified_parents.add(student.parent_user.id)
         
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -621,3 +777,173 @@ class ParentAnnouncementView(APIView):
                 })
         
         return Response(announcements)
+
+
+class TeacherAttendanceView(APIView):
+    """
+    Post attendance for students in a class, or get attendance for a class on a date
+    """
+    def get(self, request):
+        if request.user.role != 'TEACHER':
+            return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        class_id = request.query_params.get('class_id')
+        date = request.query_params.get('date')
+        
+        if not class_id or not date:
+            return Response({'detail': 'class_id and date are required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            teacher = Teacher.objects.get(id=request.user.id)
+            related_class = Class.objects.get(id=class_id, teacher=teacher)
+        except (Teacher.DoesNotExist, Class.DoesNotExist):
+            return Response({'detail': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        attendance = Attendance.objects.filter(related_class=related_class, date=date)
+        serializer = AttendanceSerializer(attendance, many=True)
+        return Response(serializer.data)
+    
+    def post(self, request):
+        if request.user.role != 'TEACHER':
+            return Response({'detail': 'Only teachers can mark attendance'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            teacher = Teacher.objects.get(id=request.user.id)
+        except Teacher.DoesNotExist:
+            return Response({'detail': 'Teacher not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        records = request.data.get('records', [])
+        if not records:
+            return Response({'detail': 'No attendance records provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        created_records = []
+        errors = []
+        for record in records:
+            student_id = record.get('student_id')
+            class_id = record.get('class_id')
+            date = record.get('date')
+            status_val = record.get('status')
+            
+            if not all([student_id, class_id, date, status_val]):
+                errors.append(f'Missing required fields for record: {record}')
+                continue
+            
+            try:
+                related_class = Class.objects.get(id=class_id)
+                student = Student.objects.get(id=student_id)
+            except (Class.DoesNotExist, Student.DoesNotExist) as e:
+                errors.append(f'Record not found: {e}')
+                continue
+            
+            attendance, created = Attendance.objects.update_or_create(
+                student=student,
+                related_class=related_class,
+                date=date,
+                defaults={
+                    'status': status_val,
+                    'marked_by': teacher
+                }
+            )
+            created_records.append(attendance)
+            
+            # Create notification for absence
+            if status_val == 'ABSENT':
+                Notification.objects.create(
+                    recipient=student,
+                    type='ABSENCE',
+                    message=f"You were marked absent in {related_class.name} on {date}"
+                )
+                send_notification_update(student.id)
+                # Also notify parent
+                if student.parent_user:
+                    Notification.objects.create(
+                        recipient=student.parent_user,
+                        type='ABSENCE',
+                        message=f"{student.get_full_name} was marked absent in {related_class.name} on {date}"
+                    )
+                    send_notification_update(student.parent_user.id)
+        
+        if errors:
+            return Response({'detail': 'Some records failed', 'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = AttendanceSerializer(created_records, many=True)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class StudentAttendanceView(APIView):
+    """
+    Get attendance for the current student
+    """
+    def get(self, request):
+        if request.user.role != 'STUDENT':
+            return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            student = Student.objects.get(id=request.user.id)
+        except Student.DoesNotExist:
+            return Response({'detail': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        attendance = Attendance.objects.filter(student=student)
+        serializer = AttendanceSerializer(attendance, many=True)
+        return Response(serializer.data)
+
+
+class ParentAttendanceView(APIView):
+    """
+    Get attendance for children of the current parent
+    """
+    def get(self, request):
+        if request.user.role != 'PARENT':
+            return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            parent = Parent.objects.get(id=request.user.id)
+        except Parent.DoesNotExist:
+            return Response({'detail': 'Parent not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        children = parent.children.all()
+        
+        result = []
+        for child in children:
+            attendance = Attendance.objects.filter(student=child)
+            serializer = AttendanceSerializer(attendance, many=True)
+            result.append({
+                'child_name': child.get_full_name,
+                'attendance': serializer.data
+            })
+        
+        return Response(result)
+
+
+class NotificationListView(APIView):
+    """
+    Get all notifications for the current user
+    """
+    def get(self, request):
+        notifications = Notification.objects.filter(recipient=request.user)
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data)
+
+
+class NotificationUnreadCountView(APIView):
+    """
+    Get count of unread notifications
+    """
+    def get(self, request):
+        count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+        return Response({'count': count})
+
+
+class NotificationMarkReadView(APIView):
+    """
+    Mark a notification as read
+    """
+    def post(self, request, notification_id):
+        try:
+            notification = Notification.objects.get(id=notification_id, recipient=request.user)
+            notification.is_read = True
+            notification.save()
+            send_notification_update(request.user.id)
+            return Response({'detail': 'Notification marked as read'})
+        except Notification.DoesNotExist:
+            return Response({'detail': 'Notification not found'}, status=status.HTTP_404_NOT_FOUND)

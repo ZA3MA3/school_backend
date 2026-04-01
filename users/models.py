@@ -255,3 +255,69 @@ class Announcement(models.Model):
 
     def __str__(self):
         return f"{self.title} by {self.teacher.get_full_name}"
+
+
+class Attendance(models.Model):
+    """
+    Attendance model for tracking student attendance
+    """
+    ATTENDANCE_STATUS = [
+        ('PRESENT', 'Present'),
+        ('ABSENT', 'Absent'),
+    ]
+    
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name='attendance_records'
+    )
+    related_class = models.ForeignKey(
+        Class,
+        on_delete=models.CASCADE,
+        related_name='attendance_records'
+    )
+    date = models.DateField()
+    status = models.CharField(max_length=10, choices=ATTENDANCE_STATUS)
+    marked_by = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='attendance_marked'
+    )
+    marked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'attendance'
+        ordering = ['-date']
+        unique_together = ['student', 'related_class', 'date']
+
+    def __str__(self):
+        return f"{self.student.get_full_name} - {self.status} on {self.date}"
+
+
+class Notification(models.Model):
+    """
+    Notification model for student/parent notifications
+    """
+    NOTIFICATION_TYPES = [
+        ('EXERCISE', 'Exercise'),
+        ('ABSENCE', 'Absence'),
+        ('ANNOUNCEMENT', 'Announcement'),
+        ('GRADE', 'Grade'),
+    ]
+    
+    recipient = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notifications'
+    )
+    type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'notifications'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Notification for {self.recipient.get_full_name}: {self.type}"

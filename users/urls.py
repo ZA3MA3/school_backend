@@ -5,7 +5,9 @@ from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    AllClassesView, StudentEnrollView, TeacherSubmissionsView,
                    DownloadSubmissionView, GradeSubmissionView, ChatContactsView,
                    ChatMessagesView, WSTicketView, TeacherAnnouncementView,
-                   StudentAnnouncementView, ParentAnnouncementView)
+                   StudentAnnouncementView, ParentAnnouncementView, TeacherAttendanceView,
+                   StudentAttendanceView, ParentAttendanceView, NotificationListView,
+                   NotificationUnreadCountView, NotificationMarkReadView, ChatUnreadCountView)
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
@@ -17,15 +19,18 @@ urlpatterns = [
     path('teacher/exercises/', TeacherExercisesView.as_view(), name='teacher_exercises'),
     path('teacher/submissions/', TeacherSubmissionsView.as_view(), name='teacher_submissions'),
     path('teacher/announcements/', TeacherAnnouncementView.as_view(), name='teacher_announcements'),
+    path('teacher/attendance/', TeacherAttendanceView.as_view(), name='teacher_attendance'),
     # Student endpoints
     path('classes/', AllClassesView.as_view(), name='all_classes'),
     path('student/enroll/', StudentEnrollView.as_view(), name='student_enroll'),
     path('student/exercises/', StudentExercisesView.as_view(), name='student_exercises'),
     path('student/submissions/', StudentSubmissionView.as_view(), name='student_submissions'),
     path('student/announcements/', StudentAnnouncementView.as_view(), name='student_announcements'),
+    path('student/attendance/', StudentAttendanceView.as_view(), name='student_attendance'),
     # Parent endpoints
     path('parent/children/', ParentChildrenView.as_view(), name='parent_children'),
     path('parent/announcements/', ParentAnnouncementView.as_view(), name='parent_announcements'),
+    path('parent/attendance/', ParentAttendanceView.as_view(), name='parent_attendance'),
     # File download
     path('exercises/<int:exercise_id>/download/', DownloadExerciseView.as_view(), name='download_exercise'),
     path('submissions/<int:submission_id>/download/', DownloadSubmissionView.as_view(), name='download_submission'),
@@ -33,6 +38,11 @@ urlpatterns = [
     # Chat endpoints
     path('chat/contacts/', ChatContactsView.as_view(), name='chat_contacts'),
     path('chat/messages/<int:contact_id>/', ChatMessagesView.as_view(), name='chat_messages'),
+    path('chat/unread-count/', ChatUnreadCountView.as_view(), name='chat_unread_count'),
     # WebSocket ticket
     path('ws-ticket/', WSTicketView.as_view(), name='ws_ticket'),
+    # Notification endpoints
+    path('notifications/', NotificationListView.as_view(), name='notifications'),
+    path('notifications/unread-count/', NotificationUnreadCountView.as_view(), name='notifications_unread_count'),
+    path('notifications/<int:notification_id>/read/', NotificationMarkReadView.as_view(), name='notification_mark_read'),
 ]

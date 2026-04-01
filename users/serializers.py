@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Teacher, Parent, Student, Class, Exercise, ExerciseSubmission, Message, Announcement
+from .models import User, Teacher, Parent, Student, Class, Exercise, ExerciseSubmission, Message, Announcement, Attendance, Notification
 
 
 class LoginSerializer(serializers.Serializer):
@@ -52,6 +52,7 @@ class StudentSerializer(serializers.ModelSerializer):
 class ClassSerializer(serializers.ModelSerializer):
     teacher_name = serializers.CharField(source='teacher.get_full_name', read_only=True)
     student_count = serializers.SerializerMethodField()
+    students = serializers.SerializerMethodField()
     
     class Meta:
         model = Class
@@ -60,6 +61,10 @@ class ClassSerializer(serializers.ModelSerializer):
     
     def get_student_count(self, obj):
         return obj.students.count()
+    
+    def get_students(self, obj):
+        students = obj.students.all()
+        return [{'id': s.id, 'full_name': s.get_full_name} for s in students]
 
 
 class ExerciseSerializer(serializers.ModelSerializer):
@@ -121,3 +126,21 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         model = Announcement
         fields = ['id', 'title', 'content', 'teacher', 'teacher_name', 'related_class', 'class_name', 'created_at']
         read_only_fields = ['id', 'teacher', 'created_at']
+
+
+class AttendanceSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.get_full_name', read_only=True)
+    class_name = serializers.CharField(source='related_class.name', read_only=True)
+    teacher_name = serializers.CharField(source='marked_by.get_full_name', read_only=True)
+    
+    class Meta:
+        model = Attendance
+        fields = ['id', 'student', 'student_name', 'related_class', 'class_name', 'date', 'status', 'marked_by', 'teacher_name', 'marked_at']
+        read_only_fields = ['id', 'marked_by', 'marked_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'recipient', 'type', 'message', 'is_read', 'created_at']
+        read_only_fields = ['id', 'recipient', 'created_at']
