@@ -145,6 +145,20 @@ class Class(models.Model):
         return f"{self.name} (Teacher: {self.teacher.get_full_name})"
 
 
+class Skill(models.Model):
+    """
+    Skill model - represents skills that exercises develop in students
+    """
+    name = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = 'skills'
+        verbose_name_plural = 'Skills'
+
+    def __str__(self):
+        return self.name
+
+
 class Exercise(models.Model):
     """
     Exercise model - stores file paths uploaded by teachers
@@ -162,6 +176,11 @@ class Exercise(models.Model):
         on_delete=models.CASCADE,
         related_name='exercises',
         null=True,
+        blank=True
+    )
+    skills = models.ManyToManyField(
+        Skill,
+        related_name='exercises',
         blank=True
     )
     due_date = models.DateField(null=True, blank=True)

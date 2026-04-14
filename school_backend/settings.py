@@ -110,20 +110,13 @@ CACHES = {
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'school_db_1',        # your PostgreSQL DB name
-        'USER': 'postgres',         # your DB user
-        'PASSWORD': 'admin123',# your DB password
+        'NAME': 'school_db_1',
+        'USER': 'postgres',
+        'PASSWORD': 'admin123',
         'HOST': 'localhost',
         'PORT': '5432',
     }
 }
-
-"""DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}"""
 
 
 # Password validation

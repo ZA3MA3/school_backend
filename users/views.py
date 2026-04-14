@@ -15,8 +15,8 @@ from django.core.cache import cache
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import secrets
-from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer, AttendanceSerializer, NotificationSerializer
-from .models import User, Class, Exercise, ExerciseSubmission, Student, Teacher, Parent, Message, Announcement, Attendance, Notification
+from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer, AttendanceSerializer, NotificationSerializer, SkillSerializer
+from .models import User, Class, Exercise, ExerciseSubmission, Student, Teacher, Parent, Message, Announcement, Attendance, Notification, Skill
 
 
 def send_notification_update(user_id):
@@ -252,6 +252,13 @@ class TeacherExercisesView(APIView):
         serializer = ExerciseSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             exercise = serializer.save(teacher=teacher)
+            
+            # Handle skills manually for FormData
+            skills_ids = request.data.getlist('skills')
+            if skills_ids:
+                skill_ids = [int(sid) for sid in skills_ids if sid.isdigit()]
+                if skill_ids:
+                    exercise.skills.set(skill_ids)
             
             # Create notifications for students in the class
             if exercise.related_class:
@@ -947,3 +954,25 @@ class NotificationMarkReadView(APIView):
             return Response({'detail': 'Notification marked as read'})
         except Notification.DoesNotExist:
             return Response({'detail': 'Notification not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class SkillListView(APIView):
+    """
+    List all skills for exercises
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        skills = Skill.objects.all()
+        serializer = SkillSerializer(skills, many=True)
+        return Response(serializer.data)
+    
+    def post(self, request):
+        if request.user.role not in ['TEACHER', 'ADMIN']:
+            return Response({'detail': 'Only teachers or admins can create skills'}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = SkillSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, Teacher, Parent, Student, Class, Exercise, ExerciseSubmission
+from .models import User, Teacher, Parent, Student, Class, Exercise, ExerciseSubmission, Skill
 
 
 @admin.register(User)
@@ -58,11 +58,18 @@ class ClassAdmin(admin.ModelAdmin):
     filter_horizontal = ['students']
 
 
+@admin.register(Skill)
+class SkillAdmin(admin.ModelAdmin):
+    list_display = ['name']
+    search_fields = ['name']
+
+
 @admin.register(Exercise)
 class ExerciseAdmin(admin.ModelAdmin):
     list_display = ['title', 'teacher', 'related_class', 'due_date']
-    list_filter = ['teacher', 'related_class']
+    list_filter = ['teacher', 'related_class', 'skills']
     search_fields = ['title', 'description', 'teacher__email']
+    filter_horizontal = ['skills']
 
 
 @admin.register(ExerciseSubmission)

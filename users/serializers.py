@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Teacher, Parent, Student, Class, Exercise, ExerciseSubmission, Message, Announcement, Attendance, Notification
+from .models import User, Teacher, Parent, Student, Class, Exercise, ExerciseSubmission, Message, Announcement, Attendance, Notification, Skill
 
 
 class LoginSerializer(serializers.Serializer):
@@ -67,16 +67,40 @@ class ClassSerializer(serializers.ModelSerializer):
         return [{'id': s.id, 'full_name': s.get_full_name} for s in students]
 
 
+class SkillSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Skill
+        fields = ['id', 'name']
+
+
 class ExerciseSerializer(serializers.ModelSerializer):
     teacher_name = serializers.CharField(source='teacher.get_full_name', read_only=True)
     class_name = serializers.CharField(source='related_class.name', read_only=True)
     file_url = serializers.SerializerMethodField()
+    skills = serializers.SerializerMethodField()
     
     class Meta:
         model = Exercise
         fields = ['id', 'title', 'description', 'file_path', 'file_url', 'teacher', 'teacher_name',
-                  'related_class', 'class_name', 'due_date']
+                  'related_class', 'class_name', 'due_date', 'skills']
         read_only_fields = ['id', 'teacher']
+    
+    def get_skills(self, obj):
+        return [{'id': s.id, 'name': s.name} for s in obj.skills.all()]
+    
+    def create(self, validated_data):
+        skills_data = validated_data.pop('skills', [])
+        exercise = Exercise.objects.create(**validated_data)
+        if skills_data:
+            exercise.skills.set(skills_data)
+        return exercise
+    
+    def update(self, instance, validated_data):
+        skills_data = validated_data.pop('skills', None)
+        exercise = super().update(instance, validated_data)
+        if skills_data is not None:
+            exercise.skills.set(skills_data)
+        return exercise
     
     def get_file_url(self, obj):
         if obj.file_path:

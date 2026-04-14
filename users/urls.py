@@ -7,7 +7,8 @@ from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    ChatMessagesView, WSTicketView, TeacherAnnouncementView,
                    StudentAnnouncementView, ParentAnnouncementView, TeacherAttendanceView,
                    StudentAttendanceView, ParentAttendanceView, NotificationListView,
-                   NotificationUnreadCountView, NotificationMarkReadView, ChatUnreadCountView)
+                   NotificationUnreadCountView, NotificationMarkReadView, ChatUnreadCountView,
+                   SkillListView)
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
@@ -45,4 +46,6 @@ urlpatterns = [
     path('notifications/', NotificationListView.as_view(), name='notifications'),
     path('notifications/unread-count/', NotificationUnreadCountView.as_view(), name='notifications_unread_count'),
     path('notifications/<int:notification_id>/read/', NotificationMarkReadView.as_view(), name='notification_mark_read'),
+    # Skills endpoint
+    path('skills/', SkillListView.as_view(), name='skills'),
 ]
