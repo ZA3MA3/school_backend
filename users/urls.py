@@ -8,7 +8,7 @@ from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    StudentAnnouncementView, ParentAnnouncementView, TeacherAttendanceView,
                    StudentAttendanceView, ParentAttendanceView, NotificationListView,
                    NotificationUnreadCountView, NotificationMarkReadView, ChatUnreadCountView,
-                   SkillListView)
+                   SkillListView, StudentPredictionView)
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
@@ -48,4 +48,6 @@ urlpatterns = [
     path('notifications/<int:notification_id>/read/', NotificationMarkReadView.as_view(), name='notification_mark_read'),
     # Skills endpoint
     path('skills/', SkillListView.as_view(), name='skills'),
+    # Prediction endpoint
+    path('predict/student/<int:student_id>/', StudentPredictionView.as_view(), name='student_prediction'),
 ]

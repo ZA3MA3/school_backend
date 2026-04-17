@@ -976,3 +976,63 @@ class SkillListView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class StudentPredictionView(APIView):
+    """
+    Predict student dropout/graduation based on their data
+    GET /api/predict/student/<student_id>/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, student_id):
+        # Check if user has permission to view this student's prediction
+        # Parents can view their children's predictions
+        # Teachers can view their students' predictions
+        # Admins can view any
+        
+        user = request.user
+        
+        # Check parent relationship
+        if user.role == 'PARENT':
+            from .models import Student, Parent
+            try:
+                parent = Parent.objects.get(pk=user.id)
+                # Check if this student is linked to the parent
+                children = parent.children.all()
+                student_ids = [c.id for c in children]
+                if student_id not in student_ids:
+                    return Response({'detail': 'You are not authorized to view this student\'s prediction'}, status=status.HTTP_403_FORBIDDEN)
+            except Parent.DoesNotExist:
+                return Response({'detail': 'Parent profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check teacher relationship
+        if user.role == 'TEACHER':
+            from .models import Student, Class
+            try:
+                student = Student.objects.get(pk=student_id)
+                # Check if student is in any of teacher's classes
+                classes = Class.objects.filter(teacher_id=user.id)
+                students_in_classes = set()
+                for cls in classes:
+                    for s in cls.students.all():
+                        students_in_classes.add(s.id)
+                if student_id not in students_in_classes:
+                    return Response({'detail': 'You are not authorized to view this student\'s prediction'}, status=status.HTTP_403_FORBIDDEN)
+            except Student.DoesNotExist:
+                return Response({'detail': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Make prediction
+        try:
+            from .apps import predict_student_dropout
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Making prediction for student {student_id}")
+            result = predict_student_dropout(student_id)
+            logger.info(f"Prediction result: {result}")
+            return Response(result)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Prediction error: {str(e)}", exc_info=True)
+            return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

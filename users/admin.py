@@ -60,7 +60,7 @@ class ClassAdmin(admin.ModelAdmin):
 
 @admin.register(Skill)
 class SkillAdmin(admin.ModelAdmin):
-    list_display = ['name']
+    list_display = ['name', 'skill_importance']
     search_fields = ['name']
 
 

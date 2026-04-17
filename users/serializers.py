@@ -45,8 +45,9 @@ class StudentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student
         fields = ['id', 'user', 'full_name', 'phone_number', 'address', 'parent_occupation', 
-                  'date_of_birth', 'enrollment_date', 'parent_user', 'parent_name']
-        read_only_fields = ['id', 'user', 'parent_name']
+                  'date_of_birth', 'enrollment_date', 'parent_user', 'parent_name', 'gender', 
+                  'scholarship_holder', 'enrollment_age']
+        read_only_fields = ['id', 'user', 'parent_name', 'enrollment_age']
 
 
 class ClassSerializer(serializers.ModelSerializer):
@@ -70,7 +71,7 @@ class ClassSerializer(serializers.ModelSerializer):
 class SkillSerializer(serializers.ModelSerializer):
     class Meta:
         model = Skill
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'skill_importance']
 
 
 class ExerciseSerializer(serializers.ModelSerializer):

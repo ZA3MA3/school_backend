@@ -105,6 +105,8 @@ class Student(User):
     parent_occupation = models.CharField(max_length=255, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     enrollment_date = models.DateField(null=True, blank=True)
+    gender = models.BooleanField(default=True, help_text="True for male, False for female")
+    scholarship_holder = models.BooleanField(default=False, help_text="True if has scholarship")
     parent_user = models.ForeignKey(
         Parent,
         on_delete=models.SET_NULL,
@@ -118,6 +120,15 @@ class Student(User):
 
     def __str__(self):
         return f"Student: {self.get_full_name}"
+    
+    @property
+    def enrollment_age(self):
+        if self.date_of_birth and self.enrollment_date:
+            age = self.enrollment_date.year - self.date_of_birth.year
+            if (self.enrollment_date.month, self.enrollment_date.day) < (self.date_of_birth.month, self.date_of_birth.day):
+                age -= 1
+            return age
+        return None
 
 
 class Class(models.Model):
@@ -150,6 +161,7 @@ class Skill(models.Model):
     Skill model - represents skills that exercises develop in students
     """
     name = models.CharField(max_length=255, unique=True)
+    skill_importance = models.IntegerField(choices=[(1, 'Low'), (2, 'Medium'), (3, 'High')], default=2)
 
     class Meta:
         db_table = 'skills'
