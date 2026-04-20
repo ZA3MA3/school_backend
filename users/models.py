@@ -352,3 +352,21 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification for {self.recipient.get_full_name}: {self.type}"
+
+
+class ContactUs(models.Model):
+    """
+    Contact Us model for storing messages from users (landing page)
+    """
+    name = models.CharField(max_length=255)
+    email = models.EmailField()
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'contact_us'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Message from {self.name} - {self.email}"

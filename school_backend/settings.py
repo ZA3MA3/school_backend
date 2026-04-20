@@ -100,8 +100,15 @@ CHANNEL_LAYERS = {
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    },
+    "ratelimit": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "ratelimit_cache",
+        "TIMEOUT": 3600,
     }
 }
+
+RATELIMIT_USE_CACHE = 'ratelimit'
 
 
 # Database

@@ -1,4 +1,5 @@
 from rest_framework.views import APIView
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -16,7 +17,8 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import secrets
 from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer, AttendanceSerializer, NotificationSerializer, SkillSerializer
-from .models import User, Class, Exercise, ExerciseSubmission, Student, Teacher, Parent, Message, Announcement, Attendance, Notification, Skill
+from .models import User, Class, Exercise, ExerciseSubmission, Student, Teacher, Parent, Message, Announcement, Attendance, Notification, Skill, ContactUs
+from django_ratelimit.decorators import ratelimit
 
 
 def send_notification_update(user_id):
@@ -1036,3 +1038,32 @@ class StudentPredictionView(APIView):
             logger = logging.getLogger(__name__)
             logger.error(f"Prediction error: {str(e)}", exc_info=True)
             return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([])  # No auth required
+@ratelimit(key='ip', rate='3/h', method='POST', block=False)
+def contact_view(request):
+    was_limited = getattr(request, 'limited', False)
+    if was_limited:
+        return Response(
+            {"detail": "You have submitted too many requests. Please try again later."},
+            status=status.HTTP_429_TOO_MANY_REQUESTS
+        )
+    
+    name = request.data.get('name')
+    email = request.data.get('email')
+    message = request.data.get('message')
+
+    if not name or not email or not message:
+        return Response(
+            {"detail": "Name, email, and message are required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    ContactUs.objects.create(name=name, email=email, message=message)
+    
+    return Response(
+        {"detail": "Your message has been sent successfully."},
+        status=status.HTTP_201_CREATED
+    )
+
