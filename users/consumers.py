@@ -24,7 +24,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             logger.warning("WebSocket connection rejected - no ticket")
             await self.close()
             return
-        
+        """
         cache_key = f"ws_ticket:{ticket}"
         user_id = cache.get(cache_key)
         
@@ -34,7 +34,27 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
         
         cache.delete(cache_key)
-        
+        """
+        cache_key = f"ws_ticket:{ticket}"
+        claimed_key = f"ws_ticket_claimed:{ticket}"
+
+        # Check if already claimed (prevents reuse without deleting)
+        if cache.get(claimed_key):
+            logger.warning("WebSocket connection rejected - ticket already in use")
+            await self.close()
+            return
+
+        user_id = cache.get(cache_key)
+
+        if not user_id:
+            logger.warning("WebSocket connection rejected - invalid or expired ticket")
+            await self.close()
+            return
+
+        # Mark as claimed atomically BEFORE accepting
+        # TTL matches your ticket TTL (e.g. 60 seconds)
+        cache.set(claimed_key, True, timeout=60)
+        cache.delete(cache_key)
         try:
             self.user = await self.get_user(user_id)
         except User.DoesNotExist:

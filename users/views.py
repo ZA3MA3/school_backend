@@ -1075,32 +1075,34 @@ class StudentPredictionView(APIView):
         
         user = request.user
         
+        # Check if user is authorized via any role
+        can_view = False
+        
         # Check parent relationship
         if has_role(user, 'PARENT'):
             try:
                 parent = ParentProfile.objects.get(user=user)
-                # Check if this student is linked to the parent
                 student_ids = list(parent.children.values_list('id', flat=True))
-                if student_id not in student_ids:
-                    return Response({'detail': 'You are not authorized to view this student\'s prediction'}, status=status.HTTP_403_FORBIDDEN)
+                if student_id in student_ids:
+                    can_view = True
             except ParentProfile.DoesNotExist:
-                return Response({'detail': 'Parent profile not found'}, status=status.HTTP_404_NOT_FOUND)
+                pass
         
         # Check teacher relationship
-        if has_role(user, 'TEACHER'):
+        if not can_view and has_role(user, 'TEACHER'):
             try:
-                student = StudentProfile.objects.get(pk=student_id)
-                # Check if student is in any of teacher's classes
                 teacher = TeacherProfile.objects.get(user=user)
-                classes = Class.objects.filter(teacher=teacher)
-                students_in_classes = set()
-                for cls in classes:
-                    for s in cls.students.all():
-                        students_in_classes.add(s.id)
-                if student_id not in students_in_classes:
-                    return Response({'detail': 'You are not authorized to view this student\'s prediction'}, status=status.HTTP_403_FORBIDDEN)
-            except StudentProfile.DoesNotExist:
-                return Response({'detail': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
+                if Class.objects.filter(teacher=teacher, students__id=student_id).exists():
+                    can_view = True
+            except TeacherProfile.DoesNotExist:
+                pass
+        
+        # Check if admin
+        if not can_view and has_role(user, 'ADMIN'):
+            can_view = True
+        
+        if not can_view:
+            return Response({'detail': 'You are not authorized to view this student\'s prediction'}, status=status.HTTP_403_FORBIDDEN)
         
         # Make prediction
         try:
