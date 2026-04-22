@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Teacher, Parent, Student, Class, Exercise, ExerciseSubmission, Message, Announcement, Attendance, Notification, Skill
+from .models import User, TeacherProfile, ParentProfile, StudentProfile, Class, Exercise, ExerciseSubmission, Message, Announcement, Attendance, Notification, Skill
 
 
 class LoginSerializer(serializers.Serializer):
@@ -9,11 +9,16 @@ class LoginSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(source='get_full_name', read_only=True)
+    roles = serializers.SlugRelatedField(
+        many=True,
+        read_only=True,
+        slug_field='name'
+    )
     
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'role', 'is_active']
-        read_only_fields = ['id', 'role']
+        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'roles', 'is_active']
+        read_only_fields = ['id', 'roles']
 
 
 class TeacherSerializer(serializers.ModelSerializer):
@@ -21,7 +26,7 @@ class TeacherSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(source='get_full_name', read_only=True)
     
     class Meta:
-        model = Teacher
+        model = TeacherProfile
         fields = ['id', 'user', 'full_name', 'phone_number', 'address', 'specialization', 'hire_date']
         read_only_fields = ['id', 'user']
 
@@ -32,7 +37,7 @@ class ParentSerializer(serializers.ModelSerializer):
     children = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     
     class Meta:
-        model = Parent
+        model = ParentProfile
         fields = ['id', 'user', 'full_name', 'phone_number', 'address', 'occupation', 'children']
         read_only_fields = ['id', 'user', 'children']
 
@@ -43,7 +48,7 @@ class StudentSerializer(serializers.ModelSerializer):
     parent_name = serializers.CharField(source='parent_user.get_full_name', read_only=True)
     
     class Meta:
-        model = Student
+        model = StudentProfile
         fields = ['id', 'user', 'full_name', 'phone_number', 'address', 'parent_occupation', 
                   'date_of_birth', 'enrollment_date', 'parent_user', 'parent_name', 'gender', 
                   'scholarship_holder', 'enrollment_age']
@@ -65,7 +70,7 @@ class ClassSerializer(serializers.ModelSerializer):
     
     def get_students(self, obj):
         students = obj.students.all()
-        return [{'id': s.id, 'full_name': s.get_full_name} for s in students]
+        return [{'id': s.id, 'user_id': s.user_id, 'full_name': s.get_full_name} for s in students]
 
 
 class SkillSerializer(serializers.ModelSerializer):

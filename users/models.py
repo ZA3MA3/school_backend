@@ -2,73 +2,86 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.db import models
 
 
-class Role(models.TextChoices):
+class RoleChoices(models.TextChoices):
     TEACHER = 'TEACHER', 'Teacher'
     STUDENT = 'STUDENT', 'Student'
     PARENT = 'PARENT', 'Parent'
     ADMIN = 'ADMIN', 'Admin'
 
 
+class Role(models.Model):
+    name = models.CharField(max_length=20, choices=RoleChoices.choices, unique=True)
+    
+    class Meta:
+        db_table = 'roles'
+        
+    def __str__(self):
+        return self.name
+
+
 class CustomUserManager(BaseUserManager):
-    def create_user(self, email, password=None, **extra_fields):
+    def create_user(self, email, password=None, roles=None, **extra_fields):
         """
-        Creates and saves a User with the given email, password, and role.
+        Creates and saves a User with the given email, password, and roles.
         """
         if not email:
             raise ValueError('The Email must be set')
 
-        role = extra_fields.pop('role', None)
-        if not role:
-            raise ValueError('Role must be provided')
-
         email = self.normalize_email(email)
-        user = self.model(email=email, role=role, **extra_fields)
+        user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
+        
+        if roles:
+            role_objs = []
+            for role_name in roles:
+                role_obj, _ = Role.objects.get_or_create(name=role_name)
+                role_objs.append(role_obj)
+            user.roles.set(role_objs)
+            
         return user
 
     def create_superuser(self, email, password=None, **extra_fields):
         """
         Creates and saves a superuser with role=ADMIN
         """
-        extra_fields.setdefault('role', Role.ADMIN)
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
 
-        if extra_fields.get('role') != Role.ADMIN:
-            raise ValueError('Superuser must have role=ADMIN.')
-
-        return self.create_user(email, password, **extra_fields)
+        user = self.create_user(email, password, roles=[RoleChoices.ADMIN], **extra_fields)
+        return user
 
 
 class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True, max_length=255)
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
-    role = models.CharField(max_length=20, choices=Role.choices)
+    roles = models.ManyToManyField(Role, related_name='users', blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
 
     objects = CustomUserManager()
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['role']
+    REQUIRED_FIELDS = []
 
     class Meta:
         db_table = 'users'
 
     def __str__(self):
-        return f"{self.email} ({self.role})"
+        role_names = ", ".join([r.name for r in self.roles.all()]) if self.pk else ""
+        return f"{self.email} ({role_names})"
     
     @property
     def get_full_name(self):
         return f"{self.first_name} {self.last_name}".strip() or self.email
 
 
-class Teacher(User):
+class TeacherProfile(models.Model):
     """
-    Teacher inherits from User with additional fields
+    Teacher profile linked to User
     """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='teacher_profile')
     phone_number = models.CharField(max_length=20, blank=True)
     address = models.TextField(blank=True)
     specialization = models.CharField(max_length=255, blank=True)
@@ -78,13 +91,18 @@ class Teacher(User):
         db_table = 'teachers'
 
     def __str__(self):
-        return f"Teacher: {self.get_full_name}"
+        return f"Teacher: {self.user.get_full_name}"
+
+    @property
+    def get_full_name(self):
+        return self.user.get_full_name
 
 
-class Parent(User):
+class ParentProfile(models.Model):
     """
-    Parent inherits from User with additional fields
+    Parent profile linked to User
     """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='parent_profile')
     phone_number = models.CharField(max_length=20, blank=True)
     address = models.TextField(blank=True)
     occupation = models.CharField(max_length=255, blank=True)
@@ -93,13 +111,18 @@ class Parent(User):
         db_table = 'parents'
 
     def __str__(self):
-        return f"Parent: {self.get_full_name}"
+        return f"Parent: {self.user.get_full_name}"
+
+    @property
+    def get_full_name(self):
+        return self.user.get_full_name
 
 
-class Student(User):
+class StudentProfile(models.Model):
     """
-    Student inherits from User with additional fields
+    Student profile linked to User
     """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile')
     phone_number = models.CharField(max_length=20, blank=True)
     address = models.TextField(blank=True)
     parent_occupation = models.CharField(max_length=255, blank=True)
@@ -108,7 +131,7 @@ class Student(User):
     gender = models.BooleanField(default=True, help_text="True for male, False for female")
     scholarship_holder = models.BooleanField(default=False, help_text="True if has scholarship")
     parent_user = models.ForeignKey(
-        Parent,
+        ParentProfile,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -119,7 +142,11 @@ class Student(User):
         db_table = 'students'
 
     def __str__(self):
-        return f"Student: {self.get_full_name}"
+        return f"Student: {self.user.get_full_name}"
+    
+    @property
+    def get_full_name(self):
+        return self.user.get_full_name
     
     @property
     def enrollment_age(self):
@@ -138,12 +165,12 @@ class Class(models.Model):
     name = models.CharField(max_length=100)  # e.g., "Mathematics", "Physics"
     description = models.TextField(blank=True)
     teacher = models.ForeignKey(
-        Teacher,
+        TeacherProfile,
         on_delete=models.CASCADE,
         related_name='classes_taught'
     )
     students = models.ManyToManyField(
-        Student,
+        StudentProfile,
         related_name='enrolled_classes',
         blank=True
     )
@@ -153,7 +180,7 @@ class Class(models.Model):
         verbose_name_plural = 'Classes'
 
     def __str__(self):
-        return f"{self.name} (Teacher: {self.teacher.get_full_name})"
+        return f"{self.name} (Teacher: {self.teacher.user.get_full_name})"
 
 
 class Skill(models.Model):
@@ -179,7 +206,7 @@ class Exercise(models.Model):
     description = models.TextField(blank=True)
     file_path = models.FileField(upload_to='exercises/')
     teacher = models.ForeignKey(
-        Teacher,
+        TeacherProfile,
         on_delete=models.CASCADE,
         related_name='uploaded_exercises'
     )
@@ -201,7 +228,7 @@ class Exercise(models.Model):
         db_table = 'exercises'
 
     def __str__(self):
-        return f"{self.title} by {self.teacher.get_full_name}"
+        return f"{self.title} by {self.teacher.user.get_full_name}"
 
 
 class ExerciseSubmission(models.Model):
@@ -209,7 +236,7 @@ class ExerciseSubmission(models.Model):
     Tracks student submissions for exercises
     """
     student = models.ForeignKey(
-        Student,
+        StudentProfile,
         on_delete=models.CASCADE,
         related_name='submissions'
     )
@@ -231,7 +258,7 @@ class ExerciseSubmission(models.Model):
         ordering = ['-submitted_at']
     
     def __str__(self):
-        return f"{self.student.get_full_name} - {self.exercise.title}"
+        return f"{self.student.user.get_full_name} - {self.exercise.title}"
 
 
 class Message(models.Model):
@@ -265,7 +292,7 @@ class Announcement(models.Model):
     Announcement model for Teacher announcements
     """
     teacher = models.ForeignKey(
-        Teacher,
+        TeacherProfile,
         on_delete=models.CASCADE,
         related_name='announcements'
     )
@@ -285,7 +312,7 @@ class Announcement(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.title} by {self.teacher.get_full_name}"
+        return f"{self.title} by {self.teacher.user.get_full_name}"
 
 
 class Attendance(models.Model):
@@ -298,7 +325,7 @@ class Attendance(models.Model):
     ]
     
     student = models.ForeignKey(
-        Student,
+        StudentProfile,
         on_delete=models.CASCADE,
         related_name='attendance_records'
     )
@@ -310,7 +337,7 @@ class Attendance(models.Model):
     date = models.DateField()
     status = models.CharField(max_length=10, choices=ATTENDANCE_STATUS)
     marked_by = models.ForeignKey(
-        Teacher,
+        TeacherProfile,
         on_delete=models.CASCADE,
         related_name='attendance_marked'
     )
@@ -322,7 +349,7 @@ class Attendance(models.Model):
         unique_together = ['student', 'related_class', 'date']
 
     def __str__(self):
-        return f"{self.student.get_full_name} - {self.status} on {self.date}"
+        return f"{self.student.user.get_full_name} - {self.status} on {self.date}"
 
 
 class Notification(models.Model):
@@ -370,3 +397,4 @@ class ContactUs(models.Model):
 
     def __str__(self):
         return f"Message from {self.name} - {self.email}"
+

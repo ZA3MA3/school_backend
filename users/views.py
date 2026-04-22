@@ -17,8 +17,13 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import secrets
 from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer, AttendanceSerializer, NotificationSerializer, SkillSerializer
-from .models import User, Class, Exercise, ExerciseSubmission, Student, Teacher, Parent, Message, Announcement, Attendance, Notification, Skill, ContactUs
+from .models import User, Class, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs
 from django_ratelimit.decorators import ratelimit
+
+
+def has_role(user, role_name):
+    """Helper to check if a user has a specific role."""
+    return user.roles.filter(name=role_name).exists()
 
 
 def send_notification_update(user_id):
@@ -80,7 +85,7 @@ class LoginView(APIView):
             access_token = str(refresh.access_token)
             refresh_token = str(refresh)
             
-            # Create response with user data
+            # Create response with user data including all roles
             response = Response({
                 'user': {
                     'id': user.id,
@@ -89,7 +94,7 @@ class LoginView(APIView):
                     'last_name': user.last_name,
                     'full_name': user.get_full_name,
                 },
-                'role': user.role
+                'roles': list(user.roles.values_list('name', flat=True))
             })
             
             # Set HttpOnly cookies (for API auth)
@@ -149,8 +154,9 @@ class CurrentUserView(APIView):
             'first_name': user.first_name,
             'last_name': user.last_name,
             'full_name': user.get_full_name,
-            'role': user.role
+            'roles': list(user.roles.values_list('name', flat=True))
         })
+
 
 
 class RefreshTokenView(APIView):
@@ -209,12 +215,12 @@ class TeacherClassesView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        if request.user.role != 'TEACHER':
+        if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            teacher = Teacher.objects.get(pk=request.user.id)
-        except Teacher.DoesNotExist:
+            teacher = TeacherProfile.objects.get(user=request.user)
+        except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         classes = Class.objects.filter(teacher=teacher)
@@ -230,12 +236,12 @@ class TeacherExercisesView(APIView):
     parser_classes = [MultiPartParser, FormParser]
     
     def get(self, request):
-        if request.user.role != 'TEACHER':
+        if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            teacher = Teacher.objects.get(pk=request.user.id)
-        except Teacher.DoesNotExist:
+            teacher = TeacherProfile.objects.get(user=request.user)
+        except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         exercises = Exercise.objects.filter(teacher=teacher)
@@ -243,12 +249,12 @@ class TeacherExercisesView(APIView):
         return Response(serializer.data)
     
     def post(self, request):
-        if request.user.role != 'TEACHER':
+        if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can create exercises'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            teacher = Teacher.objects.get(pk=request.user.id)
-        except Teacher.DoesNotExist:
+            teacher = TeacherProfile.objects.get(user=request.user)
+        except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         serializer = ExerciseSerializer(data=request.data, context={'request': request})
@@ -267,11 +273,11 @@ class TeacherExercisesView(APIView):
                 students = exercise.related_class.students.all()
                 for student in students:
                     Notification.objects.create(
-                        recipient=student,
+                        recipient=student.user,
                         type='EXERCISE',
                         message=f"New exercise uploaded: {exercise.title} in {exercise.related_class.name}"
                     )
-                    send_notification_update(student.id)
+                    send_notification_update(student.user.id)
             
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -284,7 +290,7 @@ class AllClassesView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        if request.user.role != 'STUDENT':
+        if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         classes = Class.objects.all()
@@ -299,12 +305,12 @@ class StudentEnrollView(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
-        if request.user.role != 'STUDENT':
+        if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can enroll'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            student = Student.objects.get(pk=request.user.id)
-        except Student.DoesNotExist:
+            student = StudentProfile.objects.get(user=request.user)
+        except StudentProfile.DoesNotExist:
             return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         class_id = request.data.get('class_id')
@@ -321,7 +327,11 @@ class StudentEnrollView(APIView):
             return Response({'detail': 'Already enrolled in this class'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Enroll the student
+        print(f"[DEBUG BACKEND] Enrolling student {student.id} in class {class_obj.id}")
+        print(f"[DEBUG BACKEND] Before add: {class_obj.students.count()} students in class")
         student.enrolled_classes.add(class_obj)
+        print(f"[DEBUG BACKEND] After add: {class_obj.students.count()} students in class")
+        
         
         return Response({
             'detail': 'Successfully enrolled',
@@ -337,12 +347,12 @@ class StudentExercisesView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        if request.user.role != 'STUDENT':
+        if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            student = Student.objects.get(pk=request.user.id)
-        except Student.DoesNotExist:
+            student = StudentProfile.objects.get(user=request.user)
+        except StudentProfile.DoesNotExist:
             return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         # Get all exercises from classes the student is enrolled in
@@ -359,12 +369,12 @@ class StudentSubmissionView(APIView):
     parser_classes = [MultiPartParser, FormParser]
     
     def get(self, request):
-        if request.user.role != 'STUDENT':
+        if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            student = Student.objects.get(pk=request.user.id)
-        except Student.DoesNotExist:
+            student = StudentProfile.objects.get(user=request.user)
+        except StudentProfile.DoesNotExist:
             return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         submissions = ExerciseSubmission.objects.filter(student=student)
@@ -372,12 +382,12 @@ class StudentSubmissionView(APIView):
         return Response(serializer.data)
     
     def post(self, request):
-        if request.user.role != 'STUDENT':
+        if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can submit exercises'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            student = Student.objects.get(pk=request.user.id)
-        except Student.DoesNotExist:
+            student = StudentProfile.objects.get(user=request.user)
+        except StudentProfile.DoesNotExist:
             return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         serializer = ExerciseSubmissionSerializer(data=request.data)
@@ -394,12 +404,12 @@ class TeacherSubmissionsView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        if request.user.role != 'TEACHER':
+        if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            teacher = Teacher.objects.get(pk=request.user.id)
-        except Teacher.DoesNotExist:
+            teacher = TeacherProfile.objects.get(user=request.user)
+        except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         # Get all exercises created by this teacher
@@ -418,15 +428,15 @@ class ParentChildrenView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        if request.user.role != 'PARENT':
+        if not has_role(request.user, 'PARENT'):
             return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            parent = Parent.objects.get(pk=request.user.id)
-        except Parent.DoesNotExist:
+            parent = ParentProfile.objects.get(user=request.user)
+        except ParentProfile.DoesNotExist:
             return Response({'detail': 'Parent profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        children = Student.objects.filter(parent_user=parent)
+        children = StudentProfile.objects.filter(parent_user=parent)
         from .serializers import StudentSerializer
         serializer = StudentSerializer(children, many=True)
         return Response(serializer.data)
@@ -462,10 +472,10 @@ class DownloadSubmissionView(APIView):
         submission = get_object_or_404(ExerciseSubmission, id=submission_id)
         
         # Check if user is the teacher who created the exercise or the student who submitted
-        is_teacher = hasattr(request.user, 'role') and request.user.role == 'TEACHER'
-        is_student = hasattr(request.user, 'role') and request.user.role == 'STUDENT'
-        is_owner = submission.student.id == request.user.id if is_student else False
-        is_exercise_teacher = submission.exercise.teacher.id == request.user.id if is_teacher else False
+        is_teacher = has_role(request.user, 'TEACHER')
+        is_student = has_role(request.user, 'STUDENT')
+        is_owner = submission.student.user_id == request.user.id if is_student else False
+        is_exercise_teacher = submission.exercise.teacher.user_id == request.user.id if is_teacher else False
         
         if not (is_owner or is_exercise_teacher):
             return Response({'detail': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
@@ -488,13 +498,13 @@ class GradeSubmissionView(APIView):
     permission_classes = [IsAuthenticated]
     
     def patch(self, request, submission_id):
-        if request.user.role != 'TEACHER':
+        if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can grade submissions'}, status=status.HTTP_403_FORBIDDEN)
         
         submission = get_object_or_404(ExerciseSubmission, id=submission_id)
         
         # Verify the teacher owns this exercise
-        if submission.exercise.teacher.id != request.user.id:
+        if submission.exercise.teacher.user_id != request.user.id:
             return Response({'detail': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         
         grade = request.data.get('grade')
@@ -517,23 +527,23 @@ class GradeSubmissionView(APIView):
         
         # Create notification for student
         Notification.objects.create(
-            recipient=submission.student,
+            recipient=submission.student.user,
             type='GRADE',
             message=f"Your submission for {submission.exercise.title} has been graded: {grade_value}/20"
         )
-        send_notification_update(submission.student.id)
+        send_notification_update(submission.student.user.id)
         
         # Create notification for parent if exists
         try:
-            student = Student.objects.get(id=submission.student.id)
+            student = StudentProfile.objects.get(id=submission.student.id)
             if student.parent_user:
                 Notification.objects.create(
-                    recipient=student.parent_user,
+                    recipient=student.parent_user.user,
                     type='GRADE',
                     message=f"{student.get_full_name}'s submission for {submission.exercise.title} has been graded: {grade_value}/20"
                 )
-                send_notification_update(student.parent_user.id)
-        except Student.DoesNotExist:
+                send_notification_update(student.parent_user.user.id)
+        except StudentProfile.DoesNotExist:
             pass
         
         serializer = ExerciseSubmissionSerializer(submission)
@@ -547,18 +557,58 @@ class ChatContactsView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        if request.user.role == 'TEACHER':
-            contacts = Parent.objects.all()
-            from .serializers import ParentSerializer
-            serializer = ParentSerializer(contacts, many=True)
-        elif request.user.role == 'PARENT':
-            contacts = Teacher.objects.all()
-            from .serializers import TeacherSerializer
-            serializer = TeacherSerializer(contacts, many=True)
+        from django.db import connection
+        user_id = request.user.id
+        role = request.query_params.get('role')
+        
+        is_teacher = has_role(request.user, 'TEACHER')
+        is_parent = has_role(request.user, 'PARENT')
+        
+        if role == 'TEACHER' or (not role and is_teacher):
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT DISTINCT p.user_id
+                    FROM parents p
+                    JOIN students s ON s.parent_user_id = p.id
+                    JOIN classes_students cs ON cs.studentprofile_id = s.id
+                    JOIN classes c ON c.id = cs.class_id
+                    JOIN teachers t ON t.id = c.teacher_id
+                    WHERE t.user_id = %s AND p.user_id != %s
+                """, [user_id, user_id])
+                contact_user_ids = [row[0] for row in cursor.fetchall()]
+            
+            contacts = User.objects.filter(id__in=contact_user_ids)
+            data = [{
+                'id': u.id,
+                'full_name': u.get_full_name,
+                'role': 'PARENT'
+            } for u in contacts]
+            
+        elif role == 'PARENT' or (not role and is_parent):
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT DISTINCT t.user_id
+                    FROM teachers t
+                    JOIN classes c ON c.teacher_id = t.id
+                    JOIN classes_students cs ON cs.class_id = c.id
+                    JOIN students s ON s.id = cs.studentprofile_id
+                    WHERE s.parent_user_id = (
+                        SELECT id FROM parents WHERE user_id = %s
+                    ) AND t.user_id != %s
+                """, [user_id, user_id])
+                contact_user_ids = [row[0] for row in cursor.fetchall()]
+            
+            contacts = User.objects.filter(id__in=contact_user_ids)
+            data = [{
+                'id': u.id,
+                'full_name': u.get_full_name,
+                'role': 'TEACHER'
+            } for u in contacts]
+            
         else:
             return Response({'detail': 'Only teachers and parents can access contacts'}, status=status.HTTP_403_FORBIDDEN)
         
-        return Response(serializer.data)
+        return Response(data)
 
 
 class ChatMessagesView(APIView):
@@ -623,27 +673,58 @@ class ChatUnreadCountView(APIView):
     """
     Get unread message counts for the current user
     """
+    permission_classes = [IsAuthenticated]
+    
     def get(self, request):
         user = request.user
+        role = request.query_params.get('role')
         
-        # Get contacts based on user role
-        if user.role == 'TEACHER':
-            contacts = Parent.objects.all()
-        elif user.role == 'PARENT':
-            contacts = Teacher.objects.all()
+        is_teacher = has_role(user, 'TEACHER')
+        is_parent = has_role(user, 'PARENT')
+        
+        contact_user_ids = []
+        
+        if role == 'TEACHER' or (not role and is_teacher):
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT DISTINCT p.user_id
+                    FROM parents p
+                    JOIN students s ON s.parent_user_id = p.id
+                    JOIN classes_students cs ON cs.studentprofile_id = s.id
+                    JOIN classes c ON c.id = cs.class_id
+                    JOIN teachers t ON t.id = c.teacher_id
+                    WHERE t.user_id = %s AND p.user_id != %s
+                """, [user.id, user.id])
+                contact_user_ids = [row[0] for row in cursor.fetchall()]
+                
+        elif role == 'PARENT' or (not role and is_parent):
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT DISTINCT t.user_id
+                    FROM teachers t
+                    JOIN classes c ON c.teacher_id = t.id
+                    JOIN classes_students cs ON cs.class_id = c.id
+                    JOIN students s ON s.id = cs.studentprofile_id
+                    WHERE s.parent_user_id = (
+                        SELECT id FROM parents WHERE user_id = %s
+                    ) AND t.user_id != %s
+                """, [user.id, user.id])
+                contact_user_ids = [row[0] for row in cursor.fetchall()]
         else:
             return Response({'detail': 'Only teachers and parents can access contacts'}, status=status.HTTP_403_FORBIDDEN)
         
         # Get unread counts per contact
         contact_counts = {}
-        for contact in contacts:
+        for contact_user_id in contact_user_ids:
             count = Message.objects.filter(
-                sender=contact,
+                sender_id=contact_user_id,
                 receiver=user,
                 is_read=False
             ).count()
             if count > 0:
-                contact_counts[contact.id] = count
+                contact_counts[contact_user_id] = count
         
         # Get total unread count
         total_unread = Message.objects.filter(receiver=user, is_read=False).count()
@@ -659,12 +740,12 @@ class TeacherAnnouncementView(APIView):
     Get all announcements created by the current teacher, or create a new one
     """
     def get(self, request):
-        if request.user.role != 'TEACHER':
+        if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            teacher = Teacher.objects.get(id=request.user.id)
-        except Teacher.DoesNotExist:
+            teacher = TeacherProfile.objects.get(user=request.user)
+        except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher not found'}, status=status.HTTP_404_NOT_FOUND)
         
         announcements = Announcement.objects.filter(teacher=teacher)
@@ -672,12 +753,12 @@ class TeacherAnnouncementView(APIView):
         return Response(serializer.data)
     
     def post(self, request):
-        if request.user.role != 'TEACHER':
+        if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can create announcements'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            teacher = Teacher.objects.get(id=request.user.id)
-        except Teacher.DoesNotExist:
+            teacher = TeacherProfile.objects.get(user=request.user)
+        except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher not found'}, status=status.HTTP_404_NOT_FOUND)
         
         serializer = AnnouncementSerializer(data=request.data)
@@ -691,45 +772,45 @@ class TeacherAnnouncementView(APIView):
         if announcement.related_class:
             students = announcement.related_class.students.all().distinct()
             for student in students:
-                if student.id not in notified_students:
+                if student.user_id not in notified_students:
                     Notification.objects.create(
-                        recipient=student,
+                        recipient=student.user,
                         type='ANNOUNCEMENT',
                         message=f"New announcement: {announcement.title}"
                     )
-                    send_notification_update(student.id)
-                    notified_students.add(student.id)
+                    send_notification_update(student.user_id)
+                    notified_students.add(student.user_id)
                     
-                    if student.parent_user and student.parent_user.id not in notified_parents:
+                    if student.parent_user and student.parent_user.user_id not in notified_parents:
                         Notification.objects.create(
-                            recipient=student.parent_user,
+                            recipient=student.parent_user.user,
                             type='ANNOUNCEMENT',
                             message=f"New announcement for {student.get_full_name}: {announcement.title}"
                         )
-                        send_notification_update(student.parent_user.id)
-                        notified_parents.add(student.parent_user.id)
+                        send_notification_update(student.parent_user.user_id)
+                        notified_parents.add(student.parent_user.user_id)
         else:
             # Notify all students in teacher's classes
             classes = Class.objects.filter(teacher=teacher)
             for cls in classes:
                 for student in cls.students.all():
-                    if student.id not in notified_students:
+                    if student.user_id not in notified_students:
                         Notification.objects.create(
-                            recipient=student,
+                            recipient=student.user,
                             type='ANNOUNCEMENT',
                             message=f"New announcement: {announcement.title}"
                         )
-                        send_notification_update(student.id)
-                        notified_students.add(student.id)
+                        send_notification_update(student.user_id)
+                        notified_students.add(student.user_id)
                         
-                        if student.parent_user and student.parent_user.id not in notified_parents:
+                        if student.parent_user and student.parent_user.user_id not in notified_parents:
                             Notification.objects.create(
-                                recipient=student.parent_user,
+                                recipient=student.parent_user.user,
                                 type='ANNOUNCEMENT',
                                 message=f"New announcement for {student.get_full_name}: {announcement.title}"
                             )
-                            send_notification_update(student.parent_user.id)
-                            notified_parents.add(student.parent_user.id)
+                            send_notification_update(student.parent_user.user_id)
+                            notified_parents.add(student.parent_user.user_id)
         
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -739,12 +820,12 @@ class StudentAnnouncementView(APIView):
     Get all announcements for the current student's enrolled classes
     """
     def get(self, request):
-        if request.user.role != 'STUDENT':
+        if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            student = Student.objects.get(id=request.user.id)
-        except Student.DoesNotExist:
+            student = StudentProfile.objects.get(user=request.user)
+        except StudentProfile.DoesNotExist:
             return Response({'detail': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
         
         enrolled_classes = student.enrolled_classes.all()
@@ -761,16 +842,15 @@ class ParentAnnouncementView(APIView):
     Get all announcements for children of the current parent
     """
     def get(self, request):
-        if request.user.role != 'PARENT':
+        if not has_role(request.user, 'PARENT'):
             return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            parent = Parent.objects.get(id=request.user.id)
-        except Parent.DoesNotExist:
+            parent = ParentProfile.objects.get(user=request.user)
+        except ParentProfile.DoesNotExist:
             return Response({'detail': 'Parent not found'}, status=status.HTTP_404_NOT_FOUND)
         
         children = parent.children.all()
-        enrolled_classes = Class.objects.filter(students__in=children)
         
         announcements = []
         for child in children:
@@ -793,7 +873,7 @@ class TeacherAttendanceView(APIView):
     Post attendance for students in a class, or get attendance for a class on a date
     """
     def get(self, request):
-        if request.user.role != 'TEACHER':
+        if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         class_id = request.query_params.get('class_id')
@@ -803,9 +883,9 @@ class TeacherAttendanceView(APIView):
             return Response({'detail': 'class_id and date are required'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            teacher = Teacher.objects.get(id=request.user.id)
+            teacher = TeacherProfile.objects.get(user=request.user)
             related_class = Class.objects.get(id=class_id, teacher=teacher)
-        except (Teacher.DoesNotExist, Class.DoesNotExist):
+        except (TeacherProfile.DoesNotExist, Class.DoesNotExist):
             return Response({'detail': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
         
         attendance = Attendance.objects.filter(related_class=related_class, date=date)
@@ -813,12 +893,12 @@ class TeacherAttendanceView(APIView):
         return Response(serializer.data)
     
     def post(self, request):
-        if request.user.role != 'TEACHER':
+        if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can mark attendance'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            teacher = Teacher.objects.get(id=request.user.id)
-        except Teacher.DoesNotExist:
+            teacher = TeacherProfile.objects.get(user=request.user)
+        except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher not found'}, status=status.HTTP_404_NOT_FOUND)
         
         records = request.data.get('records', [])
@@ -839,8 +919,8 @@ class TeacherAttendanceView(APIView):
             
             try:
                 related_class = Class.objects.get(id=class_id)
-                student = Student.objects.get(id=student_id)
-            except (Class.DoesNotExist, Student.DoesNotExist) as e:
+                student = StudentProfile.objects.get(id=student_id)
+            except (Class.DoesNotExist, StudentProfile.DoesNotExist) as e:
                 errors.append(f'Record not found: {e}')
                 continue
             
@@ -858,19 +938,19 @@ class TeacherAttendanceView(APIView):
             # Create notification for absence
             if status_val == 'ABSENT':
                 Notification.objects.create(
-                    recipient=student,
+                    recipient=student.user,
                     type='ABSENCE',
                     message=f"You were marked absent in {related_class.name} on {date}"
                 )
-                send_notification_update(student.id)
+                send_notification_update(student.user.id)
                 # Also notify parent
                 if student.parent_user:
                     Notification.objects.create(
-                        recipient=student.parent_user,
+                        recipient=student.parent_user.user,
                         type='ABSENCE',
                         message=f"{student.get_full_name} was marked absent in {related_class.name} on {date}"
                     )
-                    send_notification_update(student.parent_user.id)
+                    send_notification_update(student.parent_user.user.id)
         
         if errors:
             return Response({'detail': 'Some records failed', 'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
@@ -884,12 +964,12 @@ class StudentAttendanceView(APIView):
     Get attendance for the current student
     """
     def get(self, request):
-        if request.user.role != 'STUDENT':
+        if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            student = Student.objects.get(id=request.user.id)
-        except Student.DoesNotExist:
+            student = StudentProfile.objects.get(user=request.user)
+        except StudentProfile.DoesNotExist:
             return Response({'detail': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
         
         attendance = Attendance.objects.filter(student=student)
@@ -902,12 +982,12 @@ class ParentAttendanceView(APIView):
     Get attendance for children of the current parent
     """
     def get(self, request):
-        if request.user.role != 'PARENT':
+        if not has_role(request.user, 'PARENT'):
             return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            parent = Parent.objects.get(id=request.user.id)
-        except Parent.DoesNotExist:
+            parent = ParentProfile.objects.get(user=request.user)
+        except ParentProfile.DoesNotExist:
             return Response({'detail': 'Parent not found'}, status=status.HTTP_404_NOT_FOUND)
         
         children = parent.children.all()
@@ -970,7 +1050,7 @@ class SkillListView(APIView):
         return Response(serializer.data)
     
     def post(self, request):
-        if request.user.role not in ['TEACHER', 'ADMIN']:
+        if not has_role(request.user, 'TEACHER') and not has_role(request.user, 'ADMIN'):
             return Response({'detail': 'Only teachers or admins can create skills'}, status=status.HTTP_403_FORBIDDEN)
         
         serializer = SkillSerializer(data=request.data)
@@ -996,32 +1076,30 @@ class StudentPredictionView(APIView):
         user = request.user
         
         # Check parent relationship
-        if user.role == 'PARENT':
-            from .models import Student, Parent
+        if has_role(user, 'PARENT'):
             try:
-                parent = Parent.objects.get(pk=user.id)
+                parent = ParentProfile.objects.get(user=user)
                 # Check if this student is linked to the parent
-                children = parent.children.all()
-                student_ids = [c.id for c in children]
+                student_ids = list(parent.children.values_list('id', flat=True))
                 if student_id not in student_ids:
                     return Response({'detail': 'You are not authorized to view this student\'s prediction'}, status=status.HTTP_403_FORBIDDEN)
-            except Parent.DoesNotExist:
+            except ParentProfile.DoesNotExist:
                 return Response({'detail': 'Parent profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         # Check teacher relationship
-        if user.role == 'TEACHER':
-            from .models import Student, Class
+        if has_role(user, 'TEACHER'):
             try:
-                student = Student.objects.get(pk=student_id)
+                student = StudentProfile.objects.get(pk=student_id)
                 # Check if student is in any of teacher's classes
-                classes = Class.objects.filter(teacher_id=user.id)
+                teacher = TeacherProfile.objects.get(user=user)
+                classes = Class.objects.filter(teacher=teacher)
                 students_in_classes = set()
                 for cls in classes:
                     for s in cls.students.all():
                         students_in_classes.add(s.id)
                 if student_id not in students_in_classes:
                     return Response({'detail': 'You are not authorized to view this student\'s prediction'}, status=status.HTTP_403_FORBIDDEN)
-            except Student.DoesNotExist:
+            except StudentProfile.DoesNotExist:
                 return Response({'detail': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
         
         # Make prediction

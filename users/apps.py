@@ -73,7 +73,7 @@ def predict_student_dropout(student_id):
     Returns dict with prediction results.
     """
     from django.db import connection
-    from .models import Student, Attendance, ExerciseSubmission, Exercise, Skill
+    from .models import StudentProfile, Attendance, ExerciseSubmission, Exercise, Skill
     
     global model, scaler, label_encoder, feature_names
     
@@ -85,8 +85,8 @@ def predict_student_dropout(student_id):
     
     # Get student
     try:
-        student = Student.objects.get(pk=student_id)
-    except Student.DoesNotExist:
+        student = StudentProfile.objects.get(pk=student_id)
+    except StudentProfile.DoesNotExist:
         logger.error(f"Student {student_id} not found")
         raise Exception(f"Student with id {student_id} not found")
     
