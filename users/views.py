@@ -288,11 +288,23 @@ class TeacherEnrollmentsView(APIView):
             enrollment.status = EnrollmentStatus.APPROVED
             enrollment.responded_at = timezone.now()
             enrollment.save()
+            Notification.objects.create(
+                recipient=enrollment.student.user,
+                type='ENROLLMENT',
+                message=f"Your request to join {enrollment.class_obj.name} has been approved"
+            )
+            send_notification_update(enrollment.student.user.id)
             return Response({'detail': 'Enrollment approved', 'status': 'APPROVED'})
         else:
             enrollment.status = EnrollmentStatus.REJECTED
             enrollment.responded_at = timezone.now()
             enrollment.save()
+            Notification.objects.create(
+                recipient=enrollment.student.user,
+                type='ENROLLMENT',
+                message=f"Your request to join {enrollment.class_obj.name} has been rejected"
+            )
+            send_notification_update(enrollment.student.user.id)
             return Response({'detail': 'Enrollment rejected', 'status': 'REJECTED'})
 
 
@@ -411,6 +423,15 @@ class StudentEnrollView(APIView):
             class_obj=class_obj,
             status=EnrollmentStatus.PENDING
         )
+        
+        # Notify the teacher
+        teacher = class_obj.teacher
+        Notification.objects.create(
+            recipient=teacher.user,
+            type='ENROLLMENT',
+            message=f"{student.user.get_full_name} requested to join {class_obj.name}"
+        )
+        send_notification_update(teacher.user.id)
         
         return Response({
             'detail': 'Enrollment request submitted',
