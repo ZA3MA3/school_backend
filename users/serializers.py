@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, TeacherProfile, ParentProfile, StudentProfile, Class, Exercise, ExerciseSubmission, Message, Announcement, Attendance, Notification, Skill
+from .models import User, TeacherProfile, ParentProfile, StudentProfile, Class, Exercise, ExerciseSubmission, Message, Announcement, Attendance, Notification, Skill, Enrollment, EnrollmentStatus
 
 
 class LoginSerializer(serializers.Serializer):
@@ -59,18 +59,47 @@ class ClassSerializer(serializers.ModelSerializer):
     teacher_name = serializers.CharField(source='teacher.get_full_name', read_only=True)
     student_count = serializers.SerializerMethodField()
     students = serializers.SerializerMethodField()
+    enrollment_status = serializers.SerializerMethodField()
     
     class Meta:
         model = Class
-        fields = ['id', 'name', 'description', 'teacher', 'teacher_name', 'students', 'student_count']
+        fields = ['id', 'name', 'description', 'teacher', 'teacher_name', 'students', 'student_count', 'enrollment_status']
         read_only_fields = ['id']
     
     def get_student_count(self, obj):
-        return obj.students.count()
+        return Enrollment.objects.filter(class_obj=obj, status=EnrollmentStatus.APPROVED).count()
     
     def get_students(self, obj):
-        students = obj.students.all()
-        return [{'id': s.id, 'user_id': s.user_id, 'full_name': s.get_full_name} for s in students]
+        enrollments = Enrollment.objects.filter(class_obj=obj, status=EnrollmentStatus.APPROVED).select_related('student__user')
+        return [{'id': e.student.id, 'user_id': e.student.user_id, 'full_name': e.student.get_full_name} for e in enrollments]
+    
+    def get_enrollment_status(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user:
+            return None
+        try:
+            student = StudentProfile.objects.get(user=request.user)
+            enrollment = Enrollment.objects.filter(student=student, class_obj=obj).first()
+            if enrollment:
+                return {
+                    'status': enrollment.status,
+                    'requested_at': enrollment.requested_at.isoformat() if enrollment.requested_at else None,
+                    'responded_at': enrollment.responded_at.isoformat() if enrollment.responded_at else None
+                }
+        except StudentProfile.DoesNotExist:
+            pass
+        return None
+
+
+class EnrollmentSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.user.get_full_name', read_only=True)
+    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    teacher_name = serializers.CharField(source='class_obj.teacher.user.get_full_name', read_only=True)
+    
+    class Meta:
+        model = Enrollment
+        fields = ['id', 'student', 'student_name', 'class_obj', 'class_name', 'teacher_name', 'status', 'requested_at', 'responded_at']
+        read_only_fields = ['id', 'requested_at']
 
 
 class SkillSerializer(serializers.ModelSerializer):

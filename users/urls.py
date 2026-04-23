@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    TeacherClassesView, TeacherExercisesView, StudentExercisesView,
+                   TeacherEnrollmentsView,
                    StudentSubmissionView, ParentChildrenView, DownloadExerciseView,
                    AllClassesView, StudentEnrollView, TeacherSubmissionsView,
                    DownloadSubmissionView, GradeSubmissionView, ChatContactsView,
@@ -17,6 +18,7 @@ urlpatterns = [
     path('token/refresh/', RefreshTokenView.as_view(), name='token_refresh'),
     # Teacher endpoints
     path('teacher/classes/', TeacherClassesView.as_view(), name='teacher_classes'),
+    path('teacher/enrollments/', TeacherEnrollmentsView.as_view(), name='teacher_enrollments'),
     path('teacher/exercises/', TeacherExercisesView.as_view(), name='teacher_exercises'),
     path('teacher/submissions/', TeacherSubmissionsView.as_view(), name='teacher_submissions'),
     path('teacher/announcements/', TeacherAnnouncementView.as_view(), name='teacher_announcements'),

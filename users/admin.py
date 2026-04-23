@@ -58,7 +58,6 @@ class ClassAdmin(admin.ModelAdmin):
     list_display = ['name', 'teacher']
     list_filter = ['teacher']
     search_fields = ['name', 'teacher__user__email', 'teacher__user__first_name']
-    filter_horizontal = ['students']
 
 
 @admin.register(Skill)

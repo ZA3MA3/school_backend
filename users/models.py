@@ -169,11 +169,6 @@ class Class(models.Model):
         on_delete=models.CASCADE,
         related_name='classes_taught'
     )
-    students = models.ManyToManyField(
-        StudentProfile,
-        related_name='enrolled_classes',
-        blank=True
-    )
 
     class Meta:
         db_table = 'classes'
@@ -181,6 +176,44 @@ class Class(models.Model):
 
     def __str__(self):
         return f"{self.name} (Teacher: {self.teacher.user.get_full_name})"
+
+
+class EnrollmentStatus(models.TextChoices):
+    PENDING = 'PENDING', 'Pending'
+    APPROVED = 'APPROVED', 'Approved'
+    REJECTED = 'REJECTED', 'Rejected'
+
+
+class Enrollment(models.Model):
+    """
+    Enrollment requests - links students to classes with approval workflow
+    """
+    student = models.ForeignKey(
+        StudentProfile,
+        on_delete=models.CASCADE,
+        related_name='enrollments'
+    )
+    class_obj = models.ForeignKey(
+        Class,
+        on_delete=models.CASCADE,
+        related_name='enrollment_requests',
+        db_column='class_id'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=EnrollmentStatus.choices,
+        default=EnrollmentStatus.PENDING
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'enrollment'
+        unique_together = ['student', 'class_obj']
+        ordering = ['-requested_at']
+
+    def __str__(self):
+        return f"{self.student.user.get_full_name} - {self.class_obj.name} ({self.status})"
 
 
 class Skill(models.Model):
