@@ -90,7 +90,7 @@ def predict_student_dropout(student_id):
         logger.error(f"Student {student_id} not found")
         raise Exception(f"Student with id {student_id} not found")
     
-    student_name = student.get_full_name
+    student_name = student.get_full_name()
     logger.info(f"Student name: {student_name}")
     
     # Calculate the 6 real features from database

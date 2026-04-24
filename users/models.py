@@ -122,7 +122,9 @@ class StudentProfile(models.Model):
     """
     Student profile linked to User
     """
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile')
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile', null=True, blank=True)
+    first_name = models.CharField(max_length=100, blank=True)
+    last_name = models.CharField(max_length=100, blank=True)
     phone_number = models.CharField(max_length=20, blank=True)
     address = models.TextField(blank=True)
     parent_occupation = models.CharField(max_length=255, blank=True)
@@ -141,12 +143,10 @@ class StudentProfile(models.Model):
     class Meta:
         db_table = 'students'
 
-    def __str__(self):
-        return f"Student: {self.user.get_full_name}"
-    
-    @property
     def get_full_name(self):
-        return self.user.get_full_name
+        if self.first_name or self.last_name:
+            return f"{self.first_name or ''} {self.last_name or ''}".strip()
+        return self.user.get_full_name if self.user else "Unknown"
     
     @property
     def enrollment_age(self):

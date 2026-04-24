@@ -373,8 +373,14 @@ class AllClassesView(APIView):
         if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
+        student_id = request.query_params.get('student_id')
+        
+        context = {'request': request}
+        if student_id:
+            context['student_id'] = int(student_id)
+        
         classes = Class.objects.all()
-        serializer = ClassSerializer(classes, many=True, context={'request': request})
+        serializer = ClassSerializer(classes, many=True, context=context)
         return Response(serializer.data)
 
 
@@ -388,10 +394,18 @@ class StudentEnrollView(APIView):
         if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can request enrollment'}, status=status.HTTP_403_FORBIDDEN)
         
-        try:
-            student = StudentProfile.objects.get(user=request.user)
-        except StudentProfile.DoesNotExist:
-            return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        student_id = request.data.get('student_id')
+        
+        if student_id:
+            try:
+                student = StudentProfile.objects.get(id=int(student_id), parent_user__user=request.user)
+            except (StudentProfile.DoesNotExist, ValueError):
+                return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            try:
+                student = StudentProfile.objects.get(user=request.user)
+            except StudentProfile.DoesNotExist:
+                return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         class_id = request.data.get('class_id')
         if not class_id:
@@ -429,7 +443,7 @@ class StudentEnrollView(APIView):
         Notification.objects.create(
             recipient=teacher.user,
             type='ENROLLMENT',
-            message=f"{student.user.get_full_name} requested to join {class_obj.name}"
+            message=f"{student.get_full_name()} requested to join {class_obj.name}"
         )
         send_notification_update(teacher.user.id)
         
@@ -450,14 +464,22 @@ class StudentExercisesView(APIView):
         if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
-        try:
-            student = StudentProfile.objects.get(user=request.user)
-        except StudentProfile.DoesNotExist:
-            return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        
         # Get all exercises from classes the student is enrolled in
+        student_id = request.query_params.get('student_id')
+        
+        if student_id:
+            try:
+                student = StudentProfile.objects.get(id=int(student_id), parent_user__user=request.user)
+            except (StudentProfile.DoesNotExist, ValueError):
+                return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            try:
+                student = StudentProfile.objects.get(user=request.user)
+            except StudentProfile.DoesNotExist:
+                return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
         enrolled_class_ids = Enrollment.objects.filter(
-            student=student, 
+            student=student,
             status=EnrollmentStatus.APPROVED
         ).values_list('class_obj_id', flat=True)
         exercises = Exercise.objects.filter(related_class__in=enrolled_class_ids)
@@ -476,10 +498,18 @@ class StudentSubmissionView(APIView):
         if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
-        try:
-            student = StudentProfile.objects.get(user=request.user)
-        except StudentProfile.DoesNotExist:
-            return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        student_id = request.query_params.get('student_id')
+        
+        if student_id:
+            try:
+                student = StudentProfile.objects.get(id=int(student_id), parent_user__user=request.user)
+            except (StudentProfile.DoesNotExist, ValueError):
+                return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            try:
+                student = StudentProfile.objects.get(user=request.user)
+            except StudentProfile.DoesNotExist:
+                return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         submissions = ExerciseSubmission.objects.filter(student=student)
         serializer = ExerciseSubmissionSerializer(submissions, many=True)
@@ -489,10 +519,18 @@ class StudentSubmissionView(APIView):
         if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can submit exercises'}, status=status.HTTP_403_FORBIDDEN)
         
-        try:
-            student = StudentProfile.objects.get(user=request.user)
-        except StudentProfile.DoesNotExist:
-            return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        student_id = request.data.get('student_id')
+        
+        if student_id:
+            try:
+                student = StudentProfile.objects.get(id=int(student_id), parent_user__user=request.user)
+            except (StudentProfile.DoesNotExist, ValueError):
+                return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            try:
+                student = StudentProfile.objects.get(user=request.user)
+            except StudentProfile.DoesNotExist:
+                return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
         serializer = ExerciseSubmissionSerializer(data=request.data)
         if serializer.is_valid():
@@ -927,10 +965,18 @@ class StudentAnnouncementView(APIView):
         if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
-        try:
-            student = StudentProfile.objects.get(user=request.user)
-        except StudentProfile.DoesNotExist:
-            return Response({'detail': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
+        student_id = request.query_params.get('student_id')
+        
+        if student_id:
+            try:
+                student = StudentProfile.objects.get(id=int(student_id), parent_user__user=request.user)
+            except (StudentProfile.DoesNotExist, ValueError):
+                return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            try:
+                student = StudentProfile.objects.get(user=request.user)
+            except StudentProfile.DoesNotExist:
+                return Response({'detail': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
         
         enrolled_class_ids = Enrollment.objects.filter(
                 student=student, 
@@ -972,7 +1018,7 @@ class ParentAnnouncementView(APIView):
             
             for ann in child_announcements:
                 announcements.append({
-                    'child_name': child.get_full_name,
+                    'child_name': child.get_full_name(),
                     'announcement': AnnouncementSerializer(ann).data
                 })
         
@@ -1078,10 +1124,18 @@ class StudentAttendanceView(APIView):
         if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
-        try:
-            student = StudentProfile.objects.get(user=request.user)
-        except StudentProfile.DoesNotExist:
-            return Response({'detail': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
+        student_id = request.query_params.get('student_id')
+        
+        if student_id:
+            try:
+                student = StudentProfile.objects.get(id=int(student_id), parent_user__user=request.user)
+            except (StudentProfile.DoesNotExist, ValueError):
+                return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            try:
+                student = StudentProfile.objects.get(user=request.user)
+            except StudentProfile.DoesNotExist:
+                return Response({'detail': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
         
         attendance = Attendance.objects.filter(student=student)
         serializer = AttendanceSerializer(attendance, many=True)
@@ -1108,7 +1162,7 @@ class ParentAttendanceView(APIView):
             attendance = Attendance.objects.filter(student=child)
             serializer = AttendanceSerializer(attendance, many=True)
             result.append({
-                'child_name': child.get_full_name,
+                'child_name': child.get_full_name(),
                 'attendance': serializer.data
             })
         

@@ -71,14 +71,21 @@ class ClassSerializer(serializers.ModelSerializer):
     
     def get_students(self, obj):
         enrollments = Enrollment.objects.filter(class_obj=obj, status=EnrollmentStatus.APPROVED).select_related('student__user')
-        return [{'id': e.student.id, 'user_id': e.student.user_id, 'full_name': e.student.get_full_name} for e in enrollments]
+        return [{'id': e.student.id, 'user_id': e.student.user_id, 'full_name': e.student.get_full_name()} for e in enrollments]
     
     def get_enrollment_status(self, obj):
         request = self.context.get('request')
+        student_id_from_context = self.context.get('student_id')
+        
         if not request or not request.user:
             return None
+        
         try:
-            student = StudentProfile.objects.get(user=request.user)
+            # If student_id is passed in context (parent viewing as child), use that
+            if student_id_from_context:
+                student = StudentProfile.objects.get(id=student_id_from_context)
+            else:
+                student = StudentProfile.objects.get(user=request.user)
             enrollment = Enrollment.objects.filter(student=student, class_obj=obj).first()
             if enrollment:
                 return {
