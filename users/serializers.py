@@ -17,7 +17,7 @@ class UserSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'roles', 'is_active']
+        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'roles', 'is_active', 'phone_number', 'address', 'date_of_birth']
         read_only_fields = ['id', 'roles']
 
 
@@ -27,7 +27,7 @@ class TeacherSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = TeacherProfile
-        fields = ['id', 'user', 'full_name', 'phone_number', 'address', 'specialization', 'hire_date']
+        fields = ['id', 'user', 'full_name', 'specialization', 'hire_date']
         read_only_fields = ['id', 'user']
 
 
@@ -38,7 +38,7 @@ class ParentSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = ParentProfile
-        fields = ['id', 'user', 'full_name', 'phone_number', 'address', 'occupation', 'children']
+        fields = ['id', 'user', 'full_name', 'occupation', 'children']
         read_only_fields = ['id', 'user', 'children']
 
 
@@ -46,11 +46,11 @@ class StudentSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     full_name = serializers.CharField(source='get_full_name', read_only=True)
     parent_name = serializers.CharField(source='parent_user.get_full_name', read_only=True)
+    enrollment_age = serializers.IntegerField(read_only=True)
     
     class Meta:
         model = StudentProfile
-        fields = ['id', 'user', 'full_name', 'phone_number', 'address', 'parent_occupation', 
-                  'date_of_birth', 'enrollment_date', 'parent_user', 'parent_name', 'gender', 
+        fields = ['id', 'user', 'full_name', 'date_of_birth', 'enrollment_date', 'parent_user', 'parent_name', 'gender', 
                   'scholarship_holder', 'enrollment_age']
         read_only_fields = ['id', 'user', 'parent_name', 'enrollment_age']
 
@@ -71,7 +71,7 @@ class ClassSerializer(serializers.ModelSerializer):
     
     def get_students(self, obj):
         enrollments = Enrollment.objects.filter(class_obj=obj, status=EnrollmentStatus.APPROVED).select_related('student__user')
-        return [{'id': e.student.id, 'user_id': e.student.user_id, 'full_name': e.student.get_full_name()} for e in enrollments]
+        return [{'id': e.student.id, 'user_id': e.student.user_id, 'full_name': e.student.get_full_name} for e in enrollments]
     
     def get_enrollment_status(self, obj):
         request = self.context.get('request')

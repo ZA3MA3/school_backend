@@ -59,6 +59,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     roles = models.ManyToManyField(Role, related_name='users', blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    phone_number = models.CharField(max_length=20, default='')
+    phone_verified = models.BooleanField(default=False)
+    address = models.TextField(blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
 
     objects = CustomUserManager()
 
@@ -82,8 +86,6 @@ class TeacherProfile(models.Model):
     Teacher profile linked to User
     """
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='teacher_profile')
-    phone_number = models.CharField(max_length=20, blank=True)
-    address = models.TextField(blank=True)
     specialization = models.CharField(max_length=255, blank=True)
     hire_date = models.DateField(null=True, blank=True)
 
@@ -103,8 +105,6 @@ class ParentProfile(models.Model):
     Parent profile linked to User
     """
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='parent_profile')
-    phone_number = models.CharField(max_length=20, blank=True)
-    address = models.TextField(blank=True)
     occupation = models.CharField(max_length=255, blank=True)
 
     class Meta:
@@ -125,11 +125,8 @@ class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile', null=True, blank=True)
     first_name = models.CharField(max_length=100, blank=True)
     last_name = models.CharField(max_length=100, blank=True)
-    phone_number = models.CharField(max_length=20, blank=True)
-    address = models.TextField(blank=True)
-    parent_occupation = models.CharField(max_length=255, blank=True)
-    date_of_birth = models.DateField(null=True, blank=True)
     enrollment_date = models.DateField(null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
     gender = models.BooleanField(default=True, help_text="True for male, False for female")
     scholarship_holder = models.BooleanField(default=False, help_text="True if has scholarship")
     parent_user = models.ForeignKey(
@@ -143,21 +140,22 @@ class StudentProfile(models.Model):
     class Meta:
         db_table = 'students'
 
+    @property
     def get_full_name(self):
         if self.first_name or self.last_name:
             return f"{self.first_name or ''} {self.last_name or ''}".strip()
         return self.user.get_full_name if self.user else "Unknown"
-    
+
     @property
     def enrollment_age(self):
-        if self.date_of_birth and self.enrollment_date:
-            age = self.enrollment_date.year - self.date_of_birth.year
-            if (self.enrollment_date.month, self.enrollment_date.day) < (self.date_of_birth.month, self.date_of_birth.day):
-                age -= 1
-            return age
-        return None
-
-
+        dob = self.date_of_birth or (self.user.date_of_birth if self.user else None)
+        if not dob or not self.enrollment_date:
+            return None
+        age = self.enrollment_date.year - dob.year
+        if (self.enrollment_date.month, self.enrollment_date.day) < (dob.month, dob.day):
+            age -= 1
+        return age
+    
 class Class(models.Model):
     """
     Class model - taught by a Teacher, attended by many Students
@@ -428,6 +426,21 @@ class ContactUs(models.Model):
         db_table = 'contact_us'
         ordering = ['-created_at']
 
-    def __str__(self):
+def __str__(self):
         return f"Message from {self.name} - {self.email}"
+
+
+class PhoneOTP(models.Model):
+    phone_number = models.CharField(max_length=20)
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'phone_otp'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"OTP for {self.phone_number}"
 

@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth import authenticate
+from django.contrib.auth.hashers import make_password
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -17,7 +18,7 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import secrets
 from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer, AttendanceSerializer, NotificationSerializer, SkillSerializer, EnrollmentSerializer
-from .models import User, Class, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus
+from .models import User, Class, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus, PhoneOTP
 from django_ratelimit.decorators import ratelimit
 
 
@@ -1162,7 +1163,7 @@ class ParentAttendanceView(APIView):
             attendance = Attendance.objects.filter(student=child)
             serializer = AttendanceSerializer(attendance, many=True)
             result.append({
-                'child_name': child.get_full_name(),
+                'child_name': child.get_full_name,
                 'attendance': serializer.data
             })
         
@@ -1311,4 +1312,195 @@ def contact_view(request):
         {"detail": "Your message has been sent successfully."},
         status=status.HTTP_201_CREATED
     )
+
+
+class SendOTPView(APIView):
+    """Send OTP to phone number"""
+    permission_classes = []  # No auth required
+    
+    def post(self, request):
+        phone_number = request.data.get('phone_number')
+        
+        if not phone_number:
+            return Response({'detail': 'Phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate 6-digit code
+        import random
+        code = str(random.randint(100000, 999999))
+        
+        # Set expiry to 10 minutes from now
+        from django.utils import timezone
+        from datetime import timedelta
+        expires_at = timezone.now() + timedelta(minutes=10)
+        
+        # Create OTP record
+        otp = PhoneOTP.objects.create(
+            phone_number=phone_number,
+            code=code,
+            expires_at=expires_at
+        )
+        
+        # Send SMS via Twilio
+        try:
+            from twilio.rest import Client
+            client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+            message = client.messages.create(
+                body=f'Your verification code is: {code}',
+                from_=settings.TWILIO_PHONE_NUMBER,
+                to=phone_number
+            )
+            return Response({'detail': 'OTP sent successfully', 'sid': message.sid})
+        except Exception as e:
+            otp.delete()
+            return Response({'detail': f'Failed to send SMS: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class VerifyOTPView(APIView):
+    """Verify OTP and update user phone"""
+    permission_classes = []
+    
+    def post(self, request):
+        phone_number = request.data.get('phone_number')
+        code = request.data.get('code')
+        email = request.data.get('email')
+        first_name = request.data.get('first_name', '')
+        last_name = request.data.get('last_name', '')
+        address = request.data.get('address', '')
+        date_of_birth = request.data.get('date_of_birth', '')
+        
+        if not phone_number or not code:
+            return Response({'detail': 'Phone number and code are required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not email:
+            return Response({'detail': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Find valid OTP
+        try:
+            otp = PhoneOTP.objects.get(
+                phone_number=phone_number,
+                code=code,
+                is_used=False,
+                expires_at__gte=timezone.now()
+            )
+        except PhoneOTP.DoesNotExist:
+            return Response({'detail': 'Invalid or expired code'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Mark OTP as used
+        otp.is_used = True
+        otp.save()
+        
+        # Find user by email and update all fields
+        try:
+            user = User.objects.get(email=email)
+            user.phone_number = phone_number
+            user.phone_verified = True
+            if first_name:
+                user.first_name = first_name
+            if last_name:
+                user.last_name = last_name
+            if address:
+                user.address = address
+            if date_of_birth:
+                user.date_of_birth = date_of_birth
+            user.save()
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response({'detail': 'Phone verified successfully'})
+
+
+class GoogleAuthView(APIView):
+    """Handle Google OAuth login/signup from frontend"""
+    permission_classes = []
+    authentication_classes = []
+    
+    def post(self, request):
+        print(f"[DEBUG] GoogleAuthView called")
+        print(f"[DEBUG] Request data: {request.data}")
+        
+        access_token = request.data.get('access_token')
+        
+        if not access_token:
+            print(f"[DEBUG] No access token in request")
+            return Response({'detail': 'Access token is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        print(f"[DEBUG] Got access_token: {access_token[:20]}...")
+        
+        # Verify the token with Google's tokeninfo endpoint
+        try:
+            import requests
+            token_info_url = 'https://oauth2.googleapis.com/tokeninfo'
+            params = {'access_token': access_token}
+            print(f"[DEBUG] Calling Google tokeninfo endpoint...")
+            resp = requests.get(token_info_url, params=params)
+            print(f"[DEBUG] Google response status: {resp.status_code}")
+            print(f"[DEBUG] Google response text: {resp.text}")
+            
+            if resp.status_code != 200:
+                return Response({'detail': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            idinfo = resp.json()
+            print(f"[DEBUG] tokeninfo response: {idinfo}")
+            email = idinfo.get('email')
+            first_name = idinfo.get('given_name', '')
+            last_name = idinfo.get('family_name', '')
+            print(f"[DEBUG] email={email}, first_name={first_name}, last_name={last_name}")
+            
+        except Exception as e:
+            print(f"[DEBUG] Exception: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'detail': f'Token verification failed: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Find or create user
+        user, created = User.objects.get_or_create(
+            email=email,
+            defaults={
+                'first_name': first_name,
+                'last_name': last_name,
+                'password': make_password(None),
+            }
+        )
+        print(f"[DEBUG] user found/created: {user.email}, created={created}")
+        
+        # Check if this is a new user - set default role if needed
+        if created:
+            # Try to assign a default role (optional - you might want to adjust this)
+            pass
+        
+        # Generate JWT tokens for the user
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+        
+        # Set response with JWT in cookie
+        response = Response({
+            'detail': 'Login successful',
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+            },
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+        })
+        
+        # Set the JWT cookie
+        from django.conf import settings
+        response.set_cookie(
+            'access_token',
+            str(refresh.access_token),
+            httponly=True,
+            samesite='Lax',
+            max_age=3600,
+        )
+        response.set_cookie(
+            'refresh_token',
+            str(refresh),
+            httponly=True,
+            samesite='Lax',
+            max_age=7*24*3600,
+        )
+        
+        return response
 

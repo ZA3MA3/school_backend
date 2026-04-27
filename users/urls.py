@@ -9,7 +9,8 @@ from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    StudentAnnouncementView, ParentAnnouncementView, TeacherAttendanceView,
                    StudentAttendanceView, ParentAttendanceView, NotificationListView,
                    NotificationUnreadCountView, NotificationMarkReadView, ChatUnreadCountView,
-                   SkillListView, StudentPredictionView, contact_view)
+                   SkillListView, StudentPredictionView, contact_view, SendOTPView, VerifyOTPView,
+                   GoogleAuthView)
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
@@ -49,9 +50,14 @@ urlpatterns = [
     path('notifications/unread-count/', NotificationUnreadCountView.as_view(), name='notifications_unread_count'),
     path('notifications/<int:notification_id>/read/', NotificationMarkReadView.as_view(), name='notification_mark_read'),
     # Skills endpoint
-    path('skills/', SkillListView.as_view(), name='skills'),
+path('skills/', SkillListView.as_view(), name='skills'),
     # Prediction endpoint
     path('predict/student/<int:student_id>/', StudentPredictionView.as_view(), name='student_prediction'),
     # Contact Us endpoint
     path('contact/', contact_view, name='contact_us'),
+    # OTP endpoints
+    path('otp/send/', SendOTPView.as_view(), name='otp_send'),
+    path('otp/verify/', VerifyOTPView.as_view(), name='otp_verify'),
+    # Google Auth endpoint
+    path('auth/google/', GoogleAuthView.as_view(), name='google_auth'),
 ]

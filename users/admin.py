@@ -18,7 +18,7 @@ class UserAdmin(BaseUserAdmin):
     
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        ('Personal Info', {'fields': ('first_name', 'last_name')}),
+        ('Personal Info', {'fields': ('first_name', 'last_name', 'phone_number', 'address', 'date_of_birth')}),
         ('Roles', {'fields': ('roles',)}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Important dates', {'fields': ('last_login',)}),
@@ -34,21 +34,21 @@ class UserAdmin(BaseUserAdmin):
 
 @admin.register(TeacherProfile)
 class TeacherAdmin(admin.ModelAdmin):
-    list_display = ['user', 'phone_number', 'specialization']
+    list_display = ['user', 'specialization']
     list_filter = ['specialization']
     search_fields = ['user__email', 'user__first_name', 'user__last_name']
 
 
 @admin.register(ParentProfile)
 class ParentAdmin(admin.ModelAdmin):
-    list_display = ['user', 'phone_number', 'occupation']
+    list_display = ['user', 'occupation']
     list_filter = ['occupation']
     search_fields = ['user__email', 'user__first_name', 'user__last_name']
 
 
 @admin.register(StudentProfile)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ['user', 'phone_number', 'parent_user', 'enrollment_date']
+    list_display = ['user', 'parent_user', 'enrollment_date']
     list_filter = ['enrollment_date']
     search_fields = ['user__email', 'user__first_name', 'user__last_name']
 
