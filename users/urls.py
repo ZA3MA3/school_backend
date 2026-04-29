@@ -10,7 +10,7 @@ from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    StudentAttendanceView, ParentAttendanceView, NotificationListView,
                    NotificationUnreadCountView, NotificationMarkReadView, ChatUnreadCountView,
                    SkillListView, StudentPredictionView, contact_view, SendOTPView, VerifyOTPView,
-                   GoogleAuthView)
+                   GoogleAuthView, TeacherProfileCreateView, ParentStudentCreateView)
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
@@ -60,4 +60,7 @@ path('skills/', SkillListView.as_view(), name='skills'),
     path('otp/verify/', VerifyOTPView.as_view(), name='otp_verify'),
     # Google Auth endpoint
     path('auth/google/', GoogleAuthView.as_view(), name='google_auth'),
+    # Role selection endpoints
+    path('profile/teacher/', TeacherProfileCreateView.as_view(), name='teacher_profile_create'),
+    path('profile/parent/', ParentStudentCreateView.as_view(), name='parent_student_create'),
 ]

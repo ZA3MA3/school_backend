@@ -18,7 +18,7 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import secrets
 from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer, AttendanceSerializer, NotificationSerializer, SkillSerializer, EnrollmentSerializer
-from .models import User, Class, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus, PhoneOTP
+from .models import User, Class, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus, PhoneOTP, Role
 from django_ratelimit.decorators import ratelimit
 
 
@@ -1324,9 +1324,12 @@ class SendOTPView(APIView):
         if not phone_number:
             return Response({'detail': 'Phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
         
+        # Check if using test credentials
+        is_test_mode = getattr(settings, 'TWILIO_USE_TEST', False)
+        
         # Generate 6-digit code
         import random
-        code = str(random.randint(100000, 999999))
+        code = '123456' if is_test_mode else str(random.randint(100000, 999999))
         
         # Set expiry to 10 minutes from now
         from django.utils import timezone
@@ -1503,4 +1506,92 @@ class GoogleAuthView(APIView):
         )
         
         return response
+
+
+class TeacherProfileCreateView(APIView):
+    """Create teacher profile with class after phone verification"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        hire_date = request.data.get('hire_date')
+        specialization = request.data.get('specialization')
+        class_name = request.data.get('class_name')
+        class_description = request.data.get('class_description')
+        
+        if not hire_date or not specialization or not class_name:
+            return Response({'detail': 'hire_date, specialization, and class_name are required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = request.user
+        
+        # Create teacher profile
+        teacher = TeacherProfile.objects.create(
+            user=user,
+            hire_date=hire_date,
+            specialization=specialization
+        )
+        
+        # Create class
+        Class.objects.create(
+            name=class_name,
+            description=class_description or '',
+            teacher=teacher
+        )
+        
+        # Add TEACHER role
+        teacher_role = Role.objects.get(name='TEACHER')
+        user.roles.add(teacher_role)
+        
+        return Response({'detail': 'Teacher profile created successfully'})
+
+
+class ParentStudentCreateView(APIView):
+    """Create parent profile with students after phone verification"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        occupation = request.data.get('occupation')
+        students = request.data.get('students', [])
+        
+        if not occupation:
+            return Response({'detail': 'occupation is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not students or len(students) == 0:
+            return Response({'detail': 'At least one student is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = request.user
+        
+        # Create parent profile
+        parent = ParentProfile.objects.create(
+            user=user,
+            occupation=occupation
+        )
+        
+        # Create students
+        for student_data in students:
+            first_name = student_data.get('first_name')
+            last_name = student_data.get('last_name')
+            enrollment_date = student_data.get('enrollment_date')
+            date_of_birth = student_data.get('date_of_birth')
+            gender = student_data.get('gender', True)
+            
+            if not first_name or not last_name or not enrollment_date:
+                continue
+            
+            StudentProfile.objects.create(
+                first_name=first_name,
+                last_name=last_name,
+                enrollment_date=enrollment_date,
+                date_of_birth=date_of_birth or None,
+                gender=gender,
+                scholarship_holder=False,
+                parent_user=parent
+            )
+        
+        # Add PARENT and STUDENT roles
+        parent_role = Role.objects.get(name='PARENT')
+        student_role = Role.objects.get(name='STUDENT')
+        user.roles.add(parent_role)
+        user.roles.add(student_role)
+        
+        return Response({'detail': 'Parent profile and students created successfully'})
 
