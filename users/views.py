@@ -1595,3 +1595,195 @@ class ParentStudentCreateView(APIView):
         
         return Response({'detail': 'Parent profile and students created successfully'})
 
+
+# ===============================================
+# PHONE LOGIN VIEWS (Login flow only - not signup)
+# ===============================================
+
+class PhoneLoginSendView(APIView):
+    """Send OTP for phone login - Step 1"""
+    permission_classes = []
+    
+    def post(self, request):
+        phone_number = request.data.get('phone_number')
+        
+        if not phone_number:
+            return Response({'detail': 'Phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if user exists and is verified
+        try:
+            user = User.objects.get(phone_number=phone_number)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found with this phone number'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if not user.phone_verified:
+            return Response({'detail': 'Phone number not verified. Please verify your phone first.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate 6-digit code
+        import random
+        is_test_mode = 'test' in settings.TWILIO_ACCOUNT_SID.lower() if settings.TWILIO_ACCOUNT_SID else False
+        code = '123456' if is_test_mode else str(random.randint(100000, 999999))
+        
+        # Set expiry to 10 minutes from now
+        from django.utils import timezone
+        from datetime import timedelta
+        expires_at = timezone.now() + timedelta(minutes=10)
+        
+        # Create OTP record
+        otp = PhoneOTP.objects.create(
+            phone_number=phone_number,
+            code=code,
+            expires_at=expires_at
+        )
+        
+        # Send SMS via Twilio
+        try:
+            from twilio.rest import Client
+            client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+            message = client.messages.create(
+                body=f'Your login verification code is: {code}',
+                from_=settings.TWILIO_PHONE_NUMBER,
+                to=phone_number
+            )
+            return Response({'detail': 'OTP sent successfully', 'sid': message.sid})
+        except Exception as e:
+            otp.delete()
+            return Response({'detail': f'Failed to send SMS: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PhoneLoginVerifyView(APIView):
+    """Verify OTP and login - Step 2"""
+    permission_classes = []
+    
+    def post(self, request):
+        phone_number = request.data.get('phone_number')
+        code = request.data.get('code')
+        
+        if not phone_number or not code:
+            return Response({'detail': 'Phone number and code are required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Find valid OTP
+        try:
+            otp = PhoneOTP.objects.get(
+                phone_number=phone_number,
+                code=code,
+                is_used=False,
+                expires_at__gte=timezone.now()
+            )
+        except PhoneOTP.DoesNotExist:
+            return Response({'detail': 'Invalid or expired code'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Mark OTP as used
+        otp.is_used = True
+        otp.save()
+        
+        # Find user by phone and verify
+        try:
+            user = User.objects.get(phone_number=phone_number, phone_verified=True)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found or not verified'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Generate JWT tokens
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+        
+        # Create response
+        response = Response({
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+            },
+            'roles': list(user.roles.values_list('name', flat=True)),
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+        })
+        
+        # Set HttpOnly cookies
+        response.set_cookie(
+            key='access_token',
+            value=str(refresh.access_token),
+            httponly=True,
+            samesite='Lax',
+            max_age=3600,
+        )
+        response.set_cookie(
+            key='refresh_token',
+            value=str(refresh),
+            httponly=True,
+            samesite='Lax',
+            max_age=7*24*3600,
+        )
+        
+        return response
+
+
+class GoogleLoginOnlyView(APIView):
+    """Google login for existing users only - NOT for signup"""
+    permission_classes = []
+    authentication_classes = []
+    
+    def post(self, request):
+        access_token = request.data.get('access_token')
+        
+        if not access_token:
+            return Response({'detail': 'Access token is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Verify the token with Google's tokeninfo endpoint
+        try:
+            import requests
+            token_info_url = 'https://oauth2.googleapis.com/tokeninfo'
+            params = {'access_token': access_token}
+            resp = requests.get(token_info_url, params=params)
+            
+            if resp.status_code != 200:
+                return Response({'detail': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            idinfo = resp.json()
+            email = idinfo.get('email')
+            
+        except Exception as e:
+            return Response({'detail': f'Token verification failed: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Find user by email - do NOT create if not found
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'detail': 'No account found with this Google email. Please sign up first.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Generate JWT tokens
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+        
+        # Create response
+        response = Response({
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+            },
+            'roles': list(user.roles.values_list('name', flat=True)),
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+        })
+        
+        # Set HttpOnly cookies
+        response.set_cookie(
+            key='access_token',
+            value=str(refresh.access_token),
+            httponly=True,
+            samesite='Lax',
+            max_age=3600,
+        )
+        response.set_cookie(
+            key='refresh_token',
+            value=str(refresh),
+            httponly=True,
+            samesite='Lax',
+            max_age=7*24*3600,
+        )
+        
+        return response
+
