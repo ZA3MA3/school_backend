@@ -58,6 +58,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     last_name = models.CharField(max_length=150, blank=True)
     roles = models.ManyToManyField(Role, related_name='users', blank=True)
     is_active = models.BooleanField(default=True)
+    is_active_subscription = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
     phone_number = models.CharField(max_length=20, default='')
     phone_verified = models.BooleanField(default=False)
@@ -443,4 +444,26 @@ class PhoneOTP(models.Model):
 
     def __str__(self):
         return f"OTP for {self.phone_number}"
+
+
+class Payment(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('paid', 'Paid'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payments')
+    checkout_id = models.CharField(max_length=255, unique=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'payments'
+
+    def __str__(self):
+        return f"Payment {self.checkout_id} - {self.amount} DZD ({self.status})"
 

@@ -11,7 +11,8 @@ from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    NotificationUnreadCountView, NotificationMarkReadView, ChatUnreadCountView,
                    SkillListView, StudentPredictionView, contact_view, SendOTPView, VerifyOTPView,
                    GoogleAuthView, TeacherProfileCreateView, ParentStudentCreateView,
-                   PhoneLoginSendView, PhoneLoginVerifyView, GoogleLoginOnlyView)
+                   PhoneLoginSendView, PhoneLoginVerifyView, GoogleLoginOnlyView,
+                   CreateCheckoutView, chargily_webhook, SubscriptionStatusView)
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
@@ -68,4 +69,8 @@ path('skills/', SkillListView.as_view(), name='skills'),
     path('login/phone/send/', PhoneLoginSendView.as_view(), name='phone_login_send'),
     path('login/phone/verify/', PhoneLoginVerifyView.as_view(), name='phone_login_verify'),
     path('login/google/', GoogleLoginOnlyView.as_view(), name='google_login_only'),
+    # Payment endpoints
+    path('payments/checkout/', CreateCheckoutView.as_view(), name='create_checkout'),
+    path('payments/webhook/', chargily_webhook, name='chargily_webhook'),
+    path('payments/status/', SubscriptionStatusView.as_view(), name='subscription_status'),
 ]

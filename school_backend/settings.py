@@ -22,6 +22,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
+TEST_CHARGILY_PUBLIC=config('TEST_CHARGILY_PUBLIC')
+TEST_CHARGILY_PRIVATE=config('TEST_CHARGILY_PRIVATE')
+CHARGILY_USE_TEST = True
+if CHARGILY_USE_TEST:
+    CHARGILY_API_KEY = TEST_CHARGILY_PRIVATE
+    CHARGILY_BASE_URL = 'https://pay.chargily.net/test/api/v2'
+else:
+    CHARGILY_API_KEY = config('CHARGILY_PRIVATE')
+    CHARGILY_BASE_URL = 'https://pay.chargily.net/api/v2'
+FRONTEND_URL = 'http://localhost:5173'
 GOOGLE_OAUTH_CLIENT_ID = config('GOOGLE_OAUTH_CLIENT_ID')
 TWILIO_USE_TEST = True
 if TWILIO_USE_TEST:
@@ -36,7 +46,7 @@ else:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1','rendering-rebate-headcount.ngrok-free.dev']
 
 
 # Application definition

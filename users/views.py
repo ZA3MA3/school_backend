@@ -1,3 +1,5 @@
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -17,8 +19,12 @@ from django.core.cache import cache
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import secrets
+import requests
+import hashlib
+import hmac
+import json
 from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer, AttendanceSerializer, NotificationSerializer, SkillSerializer, EnrollmentSerializer
-from .models import User, Class, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus, PhoneOTP, Role
+from .models import User, Class, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus, PhoneOTP, Role, Payment
 from django_ratelimit.decorators import ratelimit
 
 
@@ -1786,4 +1792,179 @@ class GoogleLoginOnlyView(APIView):
         )
         
         return response
+
+
+class CreateCheckoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    PLAN_PRICES = {
+        'TEACHER_PARENT': 5000,
+        'TEACHER_ONLY': 3000,
+        'PARENT_ONLY': 2000,
+    }
+
+    PLAN_NAMES = {
+        'TEACHER_PARENT': 'Teacher + Parent Plan',
+        'TEACHER_ONLY': 'Teacher Plan',
+        'PARENT_ONLY': 'Parent Plan',
+    }
+
+    def post(self, request):
+        plan_type = request.data.get('plan_type', 'TEACHER_PARENT')
+        
+        if plan_type not in self.PLAN_PRICES:
+            return Response({'error': 'Invalid plan type'}, status=400)
+        
+        amount = self.PLAN_PRICES[plan_type]
+        description = self.PLAN_NAMES[plan_type]
+
+        response = requests.post(
+            f'{settings.CHARGILY_BASE_URL}/checkouts',
+            headers={
+                'Authorization': f'Bearer {settings.CHARGILY_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'amount': int(amount),
+                'currency': 'dzd',
+                'success_url': f'{settings.FRONTEND_URL}/dashboard',
+                'failure_url': f'{settings.FRONTEND_URL}/payment/failed',
+                'metadata': {
+                    'user_id': request.user.id,
+                    'plan_type': plan_type,
+                },
+                'description': description,
+            }
+        )
+
+        if not response.ok:
+            return Response({'error': 'Failed to create checkout'}, status=500)
+
+        data = response.json()
+
+        Payment.objects.create(
+            user=request.user,
+            checkout_id=data['id'],
+            amount=amount,
+            status='pending',
+            description=description,
+        )
+
+        return Response({
+            'checkout_url': data['checkout_url'],
+            'checkout_id': data['id'],
+        })
+
+
+class SubscriptionStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response({
+            'is_active_subscription': user.is_active_subscription,
+            'roles': list(user.roles.values_list('name', flat=True)),
+        })
+
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+"""
+class CreateCheckoutView(APIView):
+    permission_classes = []  # No authentication required
+
+    def post(self, request):
+        amount = request.data.get('amount')
+        description = request.data.get('description', '')
+
+        if not amount:
+            return Response({'error': 'Amount required'}, status=400)
+
+        # Get user with ID 34
+        try:
+            user = User.objects.get(id=34)
+        except User.DoesNotExist:
+            return Response({'error': 'User with ID 34 not found'}, status=404)
+
+        response = requests.post(
+            f'{settings.CHARGILY_BASE_URL}/checkouts',
+            headers={
+                'Authorization': f'Bearer {settings.CHARGILY_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'amount': int(amount),
+                'currency': 'dzd',
+                'success_url': f'{settings.FRONTEND_URL}/payment/success',
+                'failure_url': f'{settings.FRONTEND_URL}/payment/failed',
+                'metadata': {
+                    'user_id': user.id,  # Now using user ID 34
+                    'description': description,
+                },
+                'description': description,
+            }
+        )
+
+        if not response.ok:
+            return Response({'error': 'Failed to create checkout'}, status=500)
+
+        data = response.json()
+
+        Payment.objects.create(
+            user=user,  # Using user ID 34 instead of request.user
+            checkout_id=data['id'],
+            amount=amount,
+            status='pending',
+            description=description,
+        )
+
+        return Response({
+            'checkout_url': data['checkout_url'],
+            'checkout_id': data['id'],
+        })
+"""
+@csrf_exempt
+@require_POST
+def chargily_webhook(request):
+    from django.http import HttpResponse, JsonResponse
+    
+    signature = request.headers.get('signature')
+    payload = request.body.decode('utf-8')
+
+    if not signature:
+        return HttpResponse(status=400)
+
+    computed_signature = hmac.new(
+        settings.CHARGILY_API_KEY.encode('utf-8'),
+        payload.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(signature, computed_signature):
+        return HttpResponse(status=403)
+
+    event = json.loads(payload)
+    checkout = event.get('data', {})
+    checkout_id = checkout.get('id')
+    metadata = checkout.get('metadata', {})
+
+    if event['type'] == 'checkout.paid':
+        payment = Payment.objects.filter(checkout_id=checkout_id).first()
+        if payment:
+            payment.status = 'paid'
+            payment.save()
+            
+            user_id = metadata.get('user_id')
+            if user_id:
+                try:
+                    user = User.objects.get(id=user_id)
+                    user.is_active_subscription = True
+                    user.save()
+                except User.DoesNotExist:
+                    pass
+
+    elif event['type'] == 'checkout.failed':
+        Payment.objects.filter(checkout_id=checkout_id).update(status='failed')
+
+    return JsonResponse({}, status=200)
 
