@@ -230,7 +230,7 @@ class TeacherClassesView(APIView):
         except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        classes = Class.objects.filter(teacher=teacher)
+        classes = Class.objects.filter(teachers=teacher)
         serializer = ClassSerializer(classes, many=True)
         return Response(serializer.data)
 
@@ -250,8 +250,8 @@ class TeacherEnrollmentsView(APIView):
         except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Get classes taught by this teacher
-        class_ids = Class.objects.filter(teacher=teacher).values_list('id', flat=True)
+# Get classes taught by this teacher
+        class_ids = Class.objects.filter(teachers=teacher).values_list('id', flat=True)
         
         # Get pending enrollment requests for those classes
         enrollments = Enrollment.objects.filter(
@@ -287,8 +287,8 @@ class TeacherEnrollmentsView(APIView):
         except Enrollment.DoesNotExist:
             return Response({'detail': 'Enrollment not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Verify teacher teaches this class
-        if enrollment.class_obj.teacher != teacher:
+# Verify teacher teaches this class
+        if teacher not in enrollment.class_obj.teachers.all():
             return Response({'detail': 'You are not authorized to respond to this enrollment'}, status=status.HTTP_403_FORBIDDEN)
         
         if action == 'approve':
@@ -445,14 +445,14 @@ class StudentEnrollView(APIView):
             status=EnrollmentStatus.PENDING
         )
         
-        # Notify the teacher
-        teacher = class_obj.teacher
-        Notification.objects.create(
-            recipient=teacher.user,
-            type='ENROLLMENT',
-            message=f"{student.get_full_name()} requested to join {class_obj.name}"
-        )
-        send_notification_update(teacher.user.id)
+# Notify all teachers
+        for teacher in class_obj.teachers.all():
+            Notification.objects.create(
+                recipient=teacher.user,
+                type='ENROLLMENT',
+                message=f"{student.get_full_name} requested to join {class_obj.name}"
+            )
+            send_notification_update(teacher.user.id)
         
         return Response({
             'detail': 'Enrollment request submitted',
@@ -721,7 +721,8 @@ class ChatContactsView(APIView):
                     JOIN students s ON s.parent_user_id = p.id
                     JOIN enrollment e ON e.student_id = s.id AND e.status = 'APPROVED'
                     JOIN classes c ON c.id = e.class_id
-                    JOIN teachers t ON t.id = c.teacher_id
+                    JOIN classes_teachers ct ON ct.class_id = c.id
+                    JOIN teachers t ON t.id = ct.teacherprofile_id
                     WHERE t.user_id = %s AND p.user_id != %s
                 """, [user_id, user_id])
                 contact_user_ids = [row[0] for row in cursor.fetchall()]
@@ -738,7 +739,8 @@ class ChatContactsView(APIView):
                 cursor.execute("""
                     SELECT DISTINCT t.user_id
                     FROM teachers t
-                    JOIN classes c ON c.teacher_id = t.id
+                    JOIN classes_teachers ct ON ct.teacherprofile_id = t.id
+                    JOIN classes c ON c.id = ct.class_id
                     JOIN enrollment e ON e.class_id = c.id AND e.status = 'APPROVED'
                     JOIN students s ON s.id = e.student_id
                     WHERE s.parent_user_id = (
@@ -842,18 +844,19 @@ class ChatUnreadCountView(APIView):
                     JOIN students s ON s.parent_user_id = p.id
                     JOIN enrollment e ON e.student_id = s.id AND e.status = 'APPROVED'
                     JOIN classes c ON c.id = e.class_id
-                    JOIN teachers t ON t.id = c.teacher_id
+                    JOIN classes_teachers ct ON ct.class_id = c.id
+                    JOIN teachers t ON t.id = ct.teacherprofile_id
                     WHERE t.user_id = %s AND p.user_id != %s
                 """, [user.id, user.id])
                 contact_user_ids = [row[0] for row in cursor.fetchall()]
-                
         elif role == 'PARENT' or (not role and is_parent):
             from django.db import connection
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT DISTINCT t.user_id
                     FROM teachers t
-                    JOIN classes c ON c.teacher_id = t.id
+                    JOIN classes_teachers ct ON ct.teacherprofile_id = t.id
+                    JOIN classes c ON c.id = ct.class_id
                     JOIN enrollment e ON e.class_id = c.id AND e.status = 'APPROVED'
                     JOIN students s ON s.id = e.student_id
                     WHERE s.parent_user_id = (
@@ -881,7 +884,7 @@ class ChatUnreadCountView(APIView):
         return Response({
             'contact_counts': contact_counts,
             'total_unread': total_unread
-        })
+           })
 
 
 class TeacherAnnouncementView(APIView):
@@ -940,7 +943,7 @@ class TeacherAnnouncementView(APIView):
                         notified_parents.add(student.parent_user.user_id)
         else:
             # Notify all students in teacher's classes
-            classes = Class.objects.filter(teacher=teacher)
+            classes = Class.objects.filter(teachers=teacher)
             for cls in classes:
                 for student in cls.students.all():
                     if student.user_id not in notified_students:
@@ -988,7 +991,7 @@ class StudentAnnouncementView(APIView):
         enrolled_class_ids = Enrollment.objects.filter(
                 student=student, 
                 status=EnrollmentStatus.APPROVED
-            ).values_list('class_obj_id', flat=True)
+).values_list('class_obj_id', flat=True)
         
         announcements = Announcement.objects.filter(
             models.Q(related_class__in=enrolled_class_ids) | models.Q(related_class__isnull=True, teacher__classes_taught__in=enrolled_class_ids)
@@ -1002,7 +1005,7 @@ class ParentAnnouncementView(APIView):
     """
     Get all announcements for children of the current parent
     """
-    def get(self, request):
+def get(self, request):
         if not has_role(request.user, 'PARENT'):
             return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
@@ -1536,12 +1539,12 @@ class TeacherProfileCreateView(APIView):
             specialization=specialization
         )
         
-        # Create class
-        Class.objects.create(
+# Create class
+        class_obj = Class.objects.create(
             name=class_name,
-            description=class_description or '',
-            teacher=teacher
+            description=class_description or ''
         )
+        class_obj.teachers.add(teacher)
         
         # Add TEACHER role
         teacher_role = Role.objects.get(name='TEACHER')

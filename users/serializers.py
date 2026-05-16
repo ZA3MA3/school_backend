@@ -56,15 +56,25 @@ class StudentSerializer(serializers.ModelSerializer):
 
 
 class ClassSerializer(serializers.ModelSerializer):
-    teacher_name = serializers.CharField(source='teacher.get_full_name', read_only=True)
+    teacher_name = serializers.SerializerMethodField()
+    teachers = serializers.SerializerMethodField()
     student_count = serializers.SerializerMethodField()
     students = serializers.SerializerMethodField()
     enrollment_status = serializers.SerializerMethodField()
     
     class Meta:
         model = Class
-        fields = ['id', 'name', 'description', 'teacher', 'teacher_name', 'students', 'student_count', 'enrollment_status']
+        fields = ['id', 'name', 'description', 'teachers', 'teacher_name', 'students', 'student_count', 'enrollment_status']
         read_only_fields = ['id']
+    
+    def get_teacher_name(self, obj):
+        teachers = obj.teachers.all()
+        if teachers.exists():
+            return ", ".join([t.user.get_full_name for t in teachers])
+        return "No teachers"
+    
+    def get_teachers(self, obj):
+        return [{'id': t.id, 'name': t.user.get_full_name} for t in obj.teachers.all()]
     
     def get_student_count(self, obj):
         return Enrollment.objects.filter(class_obj=obj, status=EnrollmentStatus.APPROVED).count()
@@ -101,12 +111,18 @@ class ClassSerializer(serializers.ModelSerializer):
 class EnrollmentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.user.get_full_name', read_only=True)
     class_name = serializers.CharField(source='class_obj.name', read_only=True)
-    teacher_name = serializers.CharField(source='class_obj.teacher.user.get_full_name', read_only=True)
+    teacher_name = serializers.SerializerMethodField()
     
     class Meta:
         model = Enrollment
         fields = ['id', 'student', 'student_name', 'class_obj', 'class_name', 'teacher_name', 'status', 'requested_at', 'responded_at']
         read_only_fields = ['id', 'requested_at']
+    
+    def get_teacher_name(self, obj):
+        teachers = obj.class_obj.teachers.all()
+        if teachers.exists():
+            return ", ".join([t.user.get_full_name for t in teachers])
+        return "No teachers"
 
 
 class SkillSerializer(serializers.ModelSerializer):

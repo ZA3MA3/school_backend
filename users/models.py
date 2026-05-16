@@ -151,30 +151,46 @@ class StudentProfile(models.Model):
     def enrollment_age(self):
         dob = self.date_of_birth or (self.user.date_of_birth if self.user else None)
         if not dob or not self.enrollment_date:
-            return None
+         return None
         age = self.enrollment_date.year - dob.year
         if (self.enrollment_date.month, self.enrollment_date.day) < (dob.month, dob.day):
             age -= 1
         return age
     
+class Level(models.Model):
+    """
+    Level model - represents grades from primary school to high school
+    """
+    name = models.CharField(max_length=100)  # e.g., "Grade 1", "Grade 10", "Baccalaureate"
+    
+    class Meta:
+        db_table = 'levels'
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
+
 class Class(models.Model):
     """
-    Class model - taught by a Teacher, attended by many Students
+    Class model - taught by multiple Teachers, attended by many Students
     """
     name = models.CharField(max_length=100)  # e.g., "Mathematics", "Physics"
     description = models.TextField(blank=True)
-    teacher = models.ForeignKey(
+    teachers = models.ManyToManyField(
         TeacherProfile,
-        on_delete=models.CASCADE,
-        related_name='classes_taught'
+        related_name='classes_taught',
+        blank=True
     )
+    levels = models.ManyToManyField('Level', related_name='classes', blank=True)
 
     class Meta:
         db_table = 'classes'
         verbose_name_plural = 'Classes'
 
     def __str__(self):
-        return f"{self.name} (Teacher: {self.teacher.user.get_full_name})"
+        teacher_names = ", ".join([t.user.get_full_name for t in self.teachers.all()]) if self.teachers.exists() else "No teachers"
+        return f"{self.name} (Teachers: {teacher_names})"
 
 
 class EnrollmentStatus(models.TextChoices):
@@ -221,6 +237,7 @@ class Skill(models.Model):
     """
     name = models.CharField(max_length=255, unique=True)
     skill_importance = models.IntegerField(choices=[(1, 'Low'), (2, 'Medium'), (3, 'High')], default=2)
+    levels = models.ManyToManyField('Level', related_name='skills', blank=True)
 
     class Meta:
         db_table = 'skills'

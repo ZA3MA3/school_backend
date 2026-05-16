@@ -55,9 +55,13 @@ class StudentAdmin(admin.ModelAdmin):
 
 @admin.register(Class)
 class ClassAdmin(admin.ModelAdmin):
-    list_display = ['name', 'teacher']
-    list_filter = ['teacher']
-    search_fields = ['name', 'teacher__user__email', 'teacher__user__first_name']
+    list_display = ['name', 'teachers_list']
+    list_filter = ['teachers']
+    search_fields = ['name', 'teachers__user__email', 'teachers__user__first_name']
+    
+    @admin.display(description='Teachers')
+    def teachers_list(self, obj):
+        return ", ".join([t.user.get_full_name for t in obj.teachers.all()])
 
 
 @admin.register(Skill)
