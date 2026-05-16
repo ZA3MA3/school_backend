@@ -24,7 +24,7 @@ import hashlib
 import hmac
 import json
 from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer, AttendanceSerializer, NotificationSerializer, SkillSerializer, EnrollmentSerializer
-from .models import User, Class, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus, PhoneOTP, Role, Payment
+from .models import User, Class, ClassTeacher, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus, PhoneOTP, Role, Payment
 from django_ratelimit.decorators import ratelimit
 
 
@@ -255,9 +255,9 @@ class TeacherEnrollmentsView(APIView):
         
         # Get pending enrollment requests for those classes
         enrollments = Enrollment.objects.filter(
-            class_obj_id__in=class_ids,
+            class_teacher__class_obj_id__in=class_ids,
             status=EnrollmentStatus.PENDING
-        ).select_related('student__user', 'class_obj')
+        ).select_related('student__user', 'class_teacher__class_obj')
         
         serializer = EnrollmentSerializer(enrollments, many=True)
         return Response(serializer.data)
@@ -288,7 +288,7 @@ class TeacherEnrollmentsView(APIView):
             return Response({'detail': 'Enrollment not found'}, status=status.HTTP_404_NOT_FOUND)
         
 # Verify teacher teaches this class
-        if teacher not in enrollment.class_obj.teachers.all():
+        if teacher not in enrollment.class_teacher.class_obj.teachers.all():
             return Response({'detail': 'You are not authorized to respond to this enrollment'}, status=status.HTTP_403_FORBIDDEN)
         
         if action == 'approve':
@@ -298,7 +298,7 @@ class TeacherEnrollmentsView(APIView):
             Notification.objects.create(
                 recipient=enrollment.student.user,
                 type='ENROLLMENT',
-                message=f"Your request to join {enrollment.class_obj.name} has been approved"
+                message=f"Your request to join {enrollment.class_teacher.class_obj.name} has been approved"
             )
             send_notification_update(enrollment.student.user.id)
             return Response({'detail': 'Enrollment approved', 'status': 'APPROVED'})
@@ -309,7 +309,7 @@ class TeacherEnrollmentsView(APIView):
             Notification.objects.create(
                 recipient=enrollment.student.user,
                 type='ENROLLMENT',
-                message=f"Your request to join {enrollment.class_obj.name} has been rejected"
+                message=f"Your request to join {enrollment.class_teacher.class_obj.name} has been rejected"
             )
             send_notification_update(enrollment.student.user.id)
             return Response({'detail': 'Enrollment rejected', 'status': 'REJECTED'})
@@ -414,17 +414,17 @@ class StudentEnrollView(APIView):
             except StudentProfile.DoesNotExist:
                 return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        class_id = request.data.get('class_id')
-        if not class_id:
-            return Response({'detail': 'class_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        class_teacher_id = request.data.get('class_teacher_id')
+        if not class_teacher_id:
+            return Response({'detail': 'class_teacher_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            class_obj = Class.objects.get(id=class_id)
-        except Class.DoesNotExist:
-            return Response({'detail': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
+            class_teacher = ClassTeacher.objects.select_related('class_obj').get(id=class_teacher_id)
+        except ClassTeacher.DoesNotExist:
+            return Response({'detail': 'Class-Teacher assignment not found'}, status=status.HTTP_404_NOT_FOUND)
         
         # Check if there's an existing enrollment request
-        existing_enrollment = Enrollment.objects.filter(student=student, class_obj=class_obj).first()
+        existing_enrollment = Enrollment.objects.filter(student=student, class_teacher=class_teacher).first()
         if existing_enrollment:
             if existing_enrollment.status == EnrollmentStatus.APPROVED:
                 return Response({'detail': 'Already enrolled in this class'}, status=status.HTTP_400_BAD_REQUEST)
@@ -441,18 +441,17 @@ class StudentEnrollView(APIView):
         # Create new enrollment request
         enrollment = Enrollment.objects.create(
             student=student,
-            class_obj=class_obj,
+            class_teacher=class_teacher,
             status=EnrollmentStatus.PENDING
         )
         
-# Notify all teachers
-        for teacher in class_obj.teachers.all():
-            Notification.objects.create(
-                recipient=teacher.user,
-                type='ENROLLMENT',
-                message=f"{student.get_full_name} requested to join {class_obj.name}"
-            )
-            send_notification_update(teacher.user.id)
+        # Notify the teacher
+        Notification.objects.create(
+            recipient=class_teacher.teacher.user,
+            type='ENROLLMENT',
+            message=f"{student.get_full_name} requested to join {class_teacher.class_obj.name}"
+        )
+        send_notification_update(class_teacher.teacher.user.id)
         
         return Response({
             'detail': 'Enrollment request submitted',
@@ -488,7 +487,7 @@ class StudentExercisesView(APIView):
         enrolled_class_ids = Enrollment.objects.filter(
             student=student,
             status=EnrollmentStatus.APPROVED
-        ).values_list('class_obj_id', flat=True)
+        ).values_list('class_teacher__class_obj_id', flat=True)
         exercises = Exercise.objects.filter(related_class__in=enrolled_class_ids)
         serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
         return Response(serializer.data)
@@ -715,17 +714,17 @@ class ChatContactsView(APIView):
         
         if role == 'TEACHER' or (not role and is_teacher):
             with connection.cursor() as cursor:
-                cursor.execute("""
+                 cursor.execute("""
                     SELECT DISTINCT p.user_id
                     FROM parents p
                     JOIN students s ON s.parent_user_id = p.id
                     JOIN enrollment e ON e.student_id = s.id AND e.status = 'APPROVED'
-                    JOIN classes c ON c.id = e.class_id
-                    JOIN classes_teachers ct ON ct.class_id = c.id
-                    JOIN teachers t ON t.id = ct.teacherprofile_id
+                    JOIN classes_teachers ct ON ct.id = e.class_teacher_id
+                    JOIN classes c ON c.id = ct.class_id
+                    JOIN teachers t ON t.id = ct.teacher_id
                     WHERE t.user_id = %s AND p.user_id != %s
                 """, [user_id, user_id])
-                contact_user_ids = [row[0] for row in cursor.fetchall()]
+                 contact_user_ids = [row[0] for row in cursor.fetchall()]
             
             contacts = User.objects.filter(id__in=contact_user_ids)
             data = [{
@@ -739,9 +738,9 @@ class ChatContactsView(APIView):
                 cursor.execute("""
                     SELECT DISTINCT t.user_id
                     FROM teachers t
-                    JOIN classes_teachers ct ON ct.teacherprofile_id = t.id
+                    JOIN classes_teachers ct ON ct.teacher_id = t.id
                     JOIN classes c ON c.id = ct.class_id
-                    JOIN enrollment e ON e.class_id = c.id AND e.status = 'APPROVED'
+                    JOIN enrollment e ON e.class_teacher_id = ct.id AND e.status = 'APPROVED'
                     JOIN students s ON s.id = e.student_id
                     WHERE s.parent_user_id = (
                         SELECT id FROM parents WHERE user_id = %s
@@ -843,9 +842,9 @@ class ChatUnreadCountView(APIView):
                     FROM parents p
                     JOIN students s ON s.parent_user_id = p.id
                     JOIN enrollment e ON e.student_id = s.id AND e.status = 'APPROVED'
-                    JOIN classes c ON c.id = e.class_id
-                    JOIN classes_teachers ct ON ct.class_id = c.id
-                    JOIN teachers t ON t.id = ct.teacherprofile_id
+                    JOIN classes_teachers ct ON ct.id = e.class_teacher_id
+                    JOIN classes c ON c.id = ct.class_id
+                    JOIN teachers t ON t.id = ct.teacher_id
                     WHERE t.user_id = %s AND p.user_id != %s
                 """, [user.id, user.id])
                 contact_user_ids = [row[0] for row in cursor.fetchall()]
@@ -855,9 +854,9 @@ class ChatUnreadCountView(APIView):
                 cursor.execute("""
                     SELECT DISTINCT t.user_id
                     FROM teachers t
-                    JOIN classes_teachers ct ON ct.teacherprofile_id = t.id
+                    JOIN classes_teachers ct ON ct.teacher_id = t.id
                     JOIN classes c ON c.id = ct.class_id
-                    JOIN enrollment e ON e.class_id = c.id AND e.status = 'APPROVED'
+                    JOIN enrollment e ON e.class_teacher_id = ct.id AND e.status = 'APPROVED'
                     JOIN students s ON s.id = e.student_id
                     WHERE s.parent_user_id = (
                         SELECT id FROM parents WHERE user_id = %s
@@ -991,11 +990,15 @@ class StudentAnnouncementView(APIView):
         enrolled_class_ids = Enrollment.objects.filter(
                 student=student, 
                 status=EnrollmentStatus.APPROVED
-).values_list('class_obj_id', flat=True)
+        ).values_list('class_teacher__class_obj_id', flat=True)
         
         announcements = Announcement.objects.filter(
-            models.Q(related_class__in=enrolled_class_ids) | models.Q(related_class__isnull=True, teacher__classes_taught__in=enrolled_class_ids)
+            #models.Q(related_class__in=enrolled_class_ids) | models.Q(related_class__isnull=True, teacher__classes_taught__class_obj__in=enrolled_class_ids)
+            models.Q(related_class_id__in=enrolled_class_ids) |
+            models.Q(related_class__isnull=True)
         ).distinct()
+
+
         
         serializer = AnnouncementSerializer(announcements, many=True)
         return Response(serializer.data)
@@ -1021,9 +1024,9 @@ def get(self, request):
             child_class_ids = Enrollment.objects.filter(
                 student=child, 
                 status=EnrollmentStatus.APPROVED
-            ).values_list('class_obj_id', flat=True)
+            ).values_list('class_teacher__class_obj_id', flat=True)
             child_announcements = Announcement.objects.filter(
-                models.Q(related_class__in=child_class_ids) | models.Q(related_class__isnull=True, teacher__classes_taught__in=child_class_ids)
+                models.Q(related_class__in=child_class_ids) | models.Q(related_class__isnull=True, teacher__classes_taught__class_obj__in=child_class_ids)
             ).distinct()
             
             for ann in child_announcements:

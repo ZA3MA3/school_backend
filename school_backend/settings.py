@@ -137,7 +137,7 @@ RATELIMIT_USE_CACHE = 'ratelimit'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'school_db_1',
+        'NAME': 'school_db_4',
         'USER': 'postgres',
         'PASSWORD': 'admin123',
         'HOST': 'localhost',

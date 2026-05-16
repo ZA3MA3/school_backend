@@ -171,6 +171,39 @@ class Level(models.Model):
         return self.name
 
 
+class ClassTeacher(models.Model):
+    """
+    Explicit through model for Class-Teacher relationship with optional level
+    """
+    class_obj = models.ForeignKey(
+        'Class',
+        on_delete=models.CASCADE,
+        related_name='class_teachers',
+        db_column='class_id'
+    )
+    teacher = models.ForeignKey(
+        'TeacherProfile',
+        on_delete=models.CASCADE,
+        related_name='class_teachers',
+        db_column='teacher_id'
+    )
+    level = models.ForeignKey(
+        'Level',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='class_teachers',
+        db_column='level_id'
+    )
+
+    class Meta:
+        db_table = 'classes_teachers'
+        unique_together = ['class_obj', 'teacher', 'level']
+
+    def __str__(self):
+        return f"{self.class_obj.name} - {self.teacher.user.get_full_name}"
+
+
 class Class(models.Model):
     """
     Class model - taught by multiple Teachers, attended by many Students
@@ -179,6 +212,7 @@ class Class(models.Model):
     description = models.TextField(blank=True)
     teachers = models.ManyToManyField(
         TeacherProfile,
+        through='ClassTeacher',
         related_name='classes_taught',
         blank=True
     )
@@ -201,18 +235,17 @@ class EnrollmentStatus(models.TextChoices):
 
 class Enrollment(models.Model):
     """
-    Enrollment requests - links students to classes with approval workflow
+    Enrollment requests - links students to class-teacher assignments with approval workflow
     """
     student = models.ForeignKey(
         StudentProfile,
         on_delete=models.CASCADE,
         related_name='enrollments'
     )
-    class_obj = models.ForeignKey(
-        Class,
+    class_teacher = models.ForeignKey(
+        'ClassTeacher',
         on_delete=models.CASCADE,
-        related_name='enrollment_requests',
-        db_column='class_id'
+        related_name='enrollment_requests'
     )
     status = models.CharField(
         max_length=20,
@@ -224,11 +257,11 @@ class Enrollment(models.Model):
 
     class Meta:
         db_table = 'enrollment'
-        unique_together = ['student', 'class_obj']
+        unique_together = ['student', 'class_teacher']
         ordering = ['-requested_at']
 
     def __str__(self):
-        return f"{self.student.user.get_full_name} - {self.class_obj.name} ({self.status})"
+        return f"{self.student.user.get_full_name} - {self.class_teacher.class_obj.name} ({self.status})"
 
 
 class Skill(models.Model):

@@ -74,13 +74,13 @@ class ClassSerializer(serializers.ModelSerializer):
         return "No teachers"
     
     def get_teachers(self, obj):
-        return [{'id': t.id, 'name': t.user.get_full_name} for t in obj.teachers.all()]
+        return [{'id': t.id, 'name': t.user.get_full_name, 'class_teacher_id': ct.id, 'level': ct.level.name if ct.level else None} for ct in obj.class_teachers.all() for t in [ct.teacher]]
     
     def get_student_count(self, obj):
-        return Enrollment.objects.filter(class_obj=obj, status=EnrollmentStatus.APPROVED).count()
+        return obj.class_teachers.count()
     
     def get_students(self, obj):
-        enrollments = Enrollment.objects.filter(class_obj=obj, status=EnrollmentStatus.APPROVED).select_related('student__user')
+        enrollments = Enrollment.objects.filter(class_teacher__class_obj=obj, status=EnrollmentStatus.APPROVED).select_related('student__user')
         return [{'id': e.student.id, 'user_id': e.student.user_id, 'full_name': e.student.get_full_name} for e in enrollments]
     
     def get_enrollment_status(self, obj):
@@ -96,7 +96,7 @@ class ClassSerializer(serializers.ModelSerializer):
                 student = StudentProfile.objects.get(id=student_id_from_context)
             else:
                 student = StudentProfile.objects.get(user=request.user)
-            enrollment = Enrollment.objects.filter(student=student, class_obj=obj).first()
+            enrollment = Enrollment.objects.filter(student=student, class_teacher__class_obj=obj).first()
             if enrollment:
                 return {
                     'status': enrollment.status,
@@ -110,19 +110,16 @@ class ClassSerializer(serializers.ModelSerializer):
 
 class EnrollmentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.user.get_full_name', read_only=True)
-    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    class_name = serializers.CharField(source='class_teacher.class_obj.name', read_only=True)
     teacher_name = serializers.SerializerMethodField()
     
     class Meta:
         model = Enrollment
-        fields = ['id', 'student', 'student_name', 'class_obj', 'class_name', 'teacher_name', 'status', 'requested_at', 'responded_at']
+        fields = ['id', 'student', 'student_name', 'class_teacher', 'class_name', 'teacher_name', 'status', 'requested_at', 'responded_at']
         read_only_fields = ['id', 'requested_at']
     
     def get_teacher_name(self, obj):
-        teachers = obj.class_obj.teachers.all()
-        if teachers.exists():
-            return ", ".join([t.user.get_full_name for t in teachers])
-        return "No teachers"
+        return obj.class_teacher.teacher.user.get_full_name
 
 
 class SkillSerializer(serializers.ModelSerializer):
