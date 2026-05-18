@@ -299,10 +299,24 @@ class Exercise(models.Model):
         null=True,
         blank=True
     )
+    level = models.ForeignKey(
+        Level,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='exercises',
+        db_column='level_id'
+    )
     skills = models.ManyToManyField(
         Skill,
         related_name='exercises',
         blank=True
+    )
+    students = models.ManyToManyField(
+        StudentProfile,
+        related_name='assigned_exercises',
+        blank=True,
+        db_table='student_exercises'
     )
     due_date = models.DateField(null=True, blank=True)
 
