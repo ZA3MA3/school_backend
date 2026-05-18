@@ -887,9 +887,9 @@ class ChatUnreadCountView(APIView):
 
 
 class TeacherAnnouncementView(APIView):
-    """
-    Get all announcements created by the current teacher, or create a new one
-    """
+    
+    #Get all announcements created by the current teacher, or create a new one
+    
     def get(self, request):
         if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
@@ -966,6 +966,9 @@ class TeacherAnnouncementView(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+
+
+
 class StudentAnnouncementView(APIView):
     """
     Get all announcements for the current student's enrolled classes
@@ -1008,7 +1011,7 @@ class ParentAnnouncementView(APIView):
     """
     Get all announcements for children of the current parent
     """
-def get(self, request):
+    def get(self, request):
         if not has_role(request.user, 'PARENT'):
             return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
@@ -1026,12 +1029,13 @@ def get(self, request):
                 status=EnrollmentStatus.APPROVED
             ).values_list('class_teacher__class_obj_id', flat=True)
             child_announcements = Announcement.objects.filter(
-                models.Q(related_class__in=child_class_ids) | models.Q(related_class__isnull=True, teacher__classes_taught__class_obj__in=child_class_ids)
+                models.Q(related_class_id__in=child_class_ids) |
+                models.Q(related_class_id__isnull=True)
             ).distinct()
             
             for ann in child_announcements:
                 announcements.append({
-                    'child_name': child.get_full_name(),
+                    'child_name': child.get_full_name,
                     'announcement': AnnouncementSerializer(ann).data
                 })
         
