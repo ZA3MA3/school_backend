@@ -133,12 +133,23 @@ class ExerciseSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='related_class.name', read_only=True)
     file_url = serializers.SerializerMethodField()
     skills = serializers.SerializerMethodField()
+    level = serializers.SerializerMethodField()
     
     class Meta:
         model = Exercise
         fields = ['id', 'title', 'description', 'file_path', 'file_url', 'teacher', 'teacher_name',
-                  'related_class', 'class_name', 'due_date', 'skills']
+                  'related_class', 'class_name', 'due_date', 'skills', 'level']
         read_only_fields = ['id', 'teacher']
+        
+    def get_level(self, obj):
+        if obj.level:
+            return obj.level.name
+        if obj.related_class and obj.teacher:
+            from .models import ClassTeacher
+            ct = ClassTeacher.objects.filter(class_obj=obj.related_class, teacher=obj.teacher).first()
+            if ct and ct.level:
+                return ct.level.name
+        return None
     
     def get_skills(self, obj):
         return [{'id': s.id, 'name': s.name} for s in obj.skills.all()]

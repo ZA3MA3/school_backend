@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    TeacherClassesView, TeacherExercisesView, StudentExercisesView,
                    TeacherEnrollmentsView,
-                   StudentSubmissionView, ParentChildrenView, DownloadExerciseView,
+                   StudentSubmissionView, ParentChildrenView, ParentSearchExercisesView, ParentAssignExerciseView, DownloadExerciseView,
                    AllClassesView, StudentEnrollView, TeacherSubmissionsView,
                    DownloadSubmissionView, GradeSubmissionView, ChatContactsView,
                    ChatMessagesView, WSTicketView, TeacherAnnouncementView,
@@ -37,6 +37,8 @@ urlpatterns = [
     path('parent/children/', ParentChildrenView.as_view(), name='parent_children'),
     path('parent/announcements/', ParentAnnouncementView.as_view(), name='parent_announcements'),
     path('parent/attendance/', ParentAttendanceView.as_view(), name='parent_attendance'),
+    path('parent/exercises/search/', ParentSearchExercisesView.as_view(), name='parent_search_exercises'),
+    path('parent/exercises/assign/', ParentAssignExerciseView.as_view(), name='parent_assign_exercise'),
     # File download
     path('exercises/<int:exercise_id>/download/', DownloadExerciseView.as_view(), name='download_exercise'),
     path('submissions/<int:submission_id>/download/', DownloadSubmissionView.as_view(), name='download_submission'),

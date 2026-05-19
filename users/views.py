@@ -488,7 +488,9 @@ class StudentExercisesView(APIView):
             student=student,
             status=EnrollmentStatus.APPROVED
         ).values_list('class_teacher__class_obj_id', flat=True)
-        exercises = Exercise.objects.filter(related_class__in=enrolled_class_ids)
+        exercises = Exercise.objects.filter(
+            models.Q(related_class__in=enrolled_class_ids) | models.Q(students=student)
+        ).distinct()
         serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
         return Response(serializer.data)
 
@@ -1040,6 +1042,80 @@ class ParentAnnouncementView(APIView):
                 })
         
         return Response(announcements)
+
+
+class ParentSearchExercisesView(APIView):
+    """
+    Get exercises that a parent can assign to their child.
+    Excludes exercises uploaded by the child's approved class teachers.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        if not has_role(request.user, 'PARENT'):
+            return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+            
+        student_id = request.query_params.get('student_id')
+        if not student_id:
+            return Response({'detail': 'student_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            parent = ParentProfile.objects.get(user=request.user)
+            student = StudentProfile.objects.get(id=int(student_id), parent_user=parent)
+        except ParentProfile.DoesNotExist:
+            return Response({'detail': 'Parent profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        except (StudentProfile.DoesNotExist, ValueError):
+            return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+        # Get teachers of classes the child is approved to be in
+        enrolled_teacher_ids = Enrollment.objects.filter(
+            student=student,
+            status=EnrollmentStatus.APPROVED
+        ).values_list('class_teacher__teacher_id', flat=True)
+        
+        # Get exercises NOT uploaded by those teachers
+        exercises = Exercise.objects.exclude(teacher_id__in=enrolled_teacher_ids)
+        
+        serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
+        # Mark each exercise as assigned if student is in the exercise's students ManyToMany relation
+        data = []
+        for ex, serialized in zip(exercises, serializer.data):
+            serialized['is_assigned'] = ex.students.filter(id=student.id).exists()
+            data.append(serialized)
+        return Response(data)
+
+
+class ParentAssignExerciseView(APIView):
+    """
+    Allow a parent to assign an exercise to their child.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        if not has_role(request.user, 'PARENT'):
+            return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+            
+        student_id = request.data.get('student_id')
+        exercise_id = request.data.get('exercise_id')
+        
+        if not student_id or not exercise_id:
+            return Response({'detail': 'student_id and exercise_id are required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            parent = ParentProfile.objects.get(user=request.user)
+            student = StudentProfile.objects.get(id=int(student_id), parent_user=parent)
+            exercise = Exercise.objects.get(id=int(exercise_id))
+        except ParentProfile.DoesNotExist:
+            return Response({'detail': 'Parent profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        except StudentProfile.DoesNotExist:
+            return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exercise.DoesNotExist:
+            return Response({'detail': 'Exercise not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+        # Add student to exercise (junction table student_exercises)
+        exercise.students.add(student)
+        
+        return Response({'detail': 'Exercise successfully assigned to student'}, status=status.HTTP_200_OK)
 
 
 class TeacherAttendanceView(APIView):
