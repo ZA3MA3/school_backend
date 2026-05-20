@@ -1143,12 +1143,9 @@ class ParentAnnouncementView(APIView):
         
         return Response(announcements)
 
-
+"""
 class ParentSearchExercisesView(APIView):
-    """
-    Get exercises that a parent can assign to their child.
-    Excludes exercises uploaded by the child's approved class teachers.
-    """
+    
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
@@ -1158,7 +1155,10 @@ class ParentSearchExercisesView(APIView):
         student_id = request.query_params.get('student_id')
         if not student_id:
             return Response({'detail': 'student_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-            
+        
+        level = request.query_params.get('level')
+        class_name = request.query_params.get('class_name')
+        
         try:
             parent = ParentProfile.objects.get(user=request.user)
             student = StudentProfile.objects.get(id=int(student_id), parent_user=parent)
@@ -1176,6 +1176,63 @@ class ParentSearchExercisesView(APIView):
         # Get exercises NOT uploaded by those teachers
         exercises = Exercise.objects.exclude(teacher_id__in=enrolled_teacher_ids)
         
+        # Apply filters
+        if level:
+            exercises = exercises.filter(level__name=level)
+        if class_name:
+            exercises = exercises.filter(class_name__icontains=class_name)
+        
+        serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
+        # Mark each exercise as assigned if student is in the exercise's students ManyToMany relation
+        data = []
+        for ex, serialized in zip(exercises, serializer.data):
+            serialized['is_assigned'] = ex.students.filter(id=student.id).exists()
+            data.append(serialized)
+        return Response(data)"""
+
+
+class ParentSearchExercisesView(APIView):
+    """
+    Get exercises that a parent can assign to their child.
+    Excludes exercises uploaded by the child's approved class teachers.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not has_role(request.user, 'PARENT'):
+            return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+
+        student_id = request.query_params.get('student_id')
+        if not student_id:
+            return Response({'detail': 'student_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        level = request.query_params.get('level')
+        class_name = request.query_params.get('class_name')
+
+        try:
+            parent = ParentProfile.objects.get(user=request.user)
+            student = StudentProfile.objects.get(id=int(student_id), parent_user=parent)
+        except ParentProfile.DoesNotExist:
+            return Response({'detail': 'Parent profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        except (StudentProfile.DoesNotExist, ValueError):
+            return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Get teachers of classes the child is approved to be in
+        enrolled_teacher_ids = Enrollment.objects.filter(
+            student=student,
+            status=EnrollmentStatus.APPROVED
+        ).values_list('class_teacher__teacher_id', flat=True)
+
+        # Get exercises NOT uploaded by those teachers
+        exercises = Exercise.objects.exclude(teacher_id__in=enrolled_teacher_ids)
+
+        # Apply filters
+        if level:
+            exercises = exercises.filter(level__name=level)
+        if class_name:
+            # Filter by the related_class's name
+            exercises = exercises.filter(related_class__name__icontains=class_name)
+
         serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
         # Mark each exercise as assigned if student is in the exercise's students ManyToMany relation
         data = []
@@ -1183,7 +1240,6 @@ class ParentSearchExercisesView(APIView):
             serialized['is_assigned'] = ex.students.filter(id=student.id).exists()
             data.append(serialized)
         return Response(data)
-
 
 class ParentAssignExerciseView(APIView):
     """
