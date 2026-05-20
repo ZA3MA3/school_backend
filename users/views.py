@@ -524,33 +524,65 @@ class StudentSubmissionView(APIView):
         return Response(serializer.data)
     
     def post(self, request):
-        if not has_role(request.user, 'STUDENT'):
-            return Response({'detail': 'Only students can submit exercises'}, status=status.HTTP_403_FORBIDDEN)
+        is_student = has_role(request.user, 'STUDENT')
+        is_parent = has_role(request.user, 'PARENT')
+        if not (is_student or is_parent):
+            return Response({'detail': 'Only students or parents can submit exercises'}, status=status.HTTP_403_FORBIDDEN)
         
-        student_id = request.data.get('student_id')
+        student_id = (
+            request.data.get('student_id')
+            or request.data.get('child_id')
+            or request.data.get('childId')
+            or request.query_params.get('student_id')
+            or request.query_params.get('child_id')
+            or request.query_params.get('childId')
+        )
         
         if student_id:
             try:
-                student = StudentProfile.objects.get(id=int(student_id), parent_user__user=request.user)
-            except (StudentProfile.DoesNotExist, ValueError):
+                student = StudentProfile.objects.get(id=int(student_id))
+            except (StudentProfile.DoesNotExist, ValueError, TypeError):
                 return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            is_student_owner = student.user_id == request.user.id
+            is_parent_owner = student.parent_user and student.parent_user.user_id == request.user.id
+            if not (is_student_owner or is_parent_owner):
+                return Response({'detail': 'Permission denied for this student'}, status=status.HTTP_403_FORBIDDEN)
         else:
             try:
                 student = StudentProfile.objects.get(user=request.user)
             except StudentProfile.DoesNotExist:
-                return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
+                if not is_parent:
+                    return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
+                
+                try:
+                    parent = ParentProfile.objects.get(user=request.user)
+                except ParentProfile.DoesNotExist:
+                    return Response({'detail': 'Parent profile not found'}, status=status.HTTP_404_NOT_FOUND)
+                
+                children = list(parent.children.all()[:2])
+                if len(children) == 1:
+                    student = children[0]
+                elif len(children) == 0:
+                    return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
+                else:
+                    return Response({'detail': 'student_id is required when parent has multiple children'}, status=status.HTTP_400_BAD_REQUEST)
         
-        serializer = ExerciseSubmissionSerializer(data=request.data)
+        submission_data = request.data.copy()
+        submission_data.pop('student_id', None)
+        submission_data.pop('child_id', None)
+        submission_data.pop('childId', None)
+        serializer = ExerciseSubmissionSerializer(data=submission_data, context={'request': request})
         if serializer.is_valid():
             serializer.save(student=student)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
+"""
 class TeacherSubmissionsView(APIView):
-    """
-    Get all submissions for exercises created by the teacher
-    """
+    
+    #Get all submissions for exercises created by the teacher
+    
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
@@ -569,7 +601,72 @@ class TeacherSubmissionsView(APIView):
         submissions = ExerciseSubmission.objects.filter(exercise__in=teacher_exercises)
         serializer = ExerciseSubmissionSerializer(submissions, many=True, context={'request': request})
         return Response(serializer.data)
+"""
 
+
+class TeacherSubmissionsView(APIView):
+    """
+    Get all submissions for exercises created by the teacher.
+    Only includes submissions from students enrolled in the teacher's classes.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not has_role(request.user, 'TEACHER'):
+            return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            teacher = TeacherProfile.objects.get(user=request.user)
+        except TeacherProfile.DoesNotExist:
+            return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Get all ClassTeacher entries for this teacher
+        class_teacher_entries = ClassTeacher.objects.filter(teacher=teacher)
+
+        # Get the actual Class objects through class_obj
+        teacher_classes = Class.objects.filter(
+            id__in=class_teacher_entries.values_list('class_obj_id', flat=True)
+        ).distinct()
+
+        if not teacher_classes.exists():
+            return Response({
+                'detail': 'No classes found for this teacher',
+                'submissions': [],
+                'total': 0
+            }, status=status.HTTP_200_OK)
+
+        # Get all students enrolled in the teacher's classes
+        # Through Enrollment model which links to ClassTeacher
+        students_in_teacher_classes = StudentProfile.objects.filter(
+            enrollments__class_teacher__class_obj__in=teacher_classes,
+            enrollments__status=EnrollmentStatus.APPROVED
+        ).distinct()
+
+        # Get all exercises created by this teacher
+        teacher_exercises = Exercise.objects.filter(teacher=teacher)
+
+        if not teacher_exercises.exists():
+            return Response({
+                'submissions': [],
+                'total': 0,
+                'detail': 'No exercises created by this teacher'
+            }, status=status.HTTP_200_OK)
+
+        # Get submissions ONLY from:
+        # 1. Exercises the teacher created
+        # 2. Students enrolled in the teacher's classes
+        submissions = ExerciseSubmission.objects.filter(
+            exercise__in=teacher_exercises,
+            student__in=students_in_teacher_classes
+        ).select_related(
+            'student',
+            'student__user',
+            'exercise'
+        ).order_by('-submitted_at')
+
+        serializer = ExerciseSubmissionSerializer(submissions, many=True, context={'request': request})
+
+        return Response(serializer.data)
 
 class ParentChildrenView(APIView):
     """
@@ -621,13 +718,16 @@ class DownloadSubmissionView(APIView):
     def get(self, request, submission_id):
         submission = get_object_or_404(ExerciseSubmission, id=submission_id)
         
-        # Check if user is the teacher who created the exercise or the student who submitted
+        # Check if user is the teacher who created the exercise, the student who submitted, or the parent of the student
         is_teacher = has_role(request.user, 'TEACHER')
         is_student = has_role(request.user, 'STUDENT')
+        is_parent = has_role(request.user, 'PARENT')
+        
         is_owner = submission.student.user_id == request.user.id if is_student else False
         is_exercise_teacher = submission.exercise.teacher.user_id == request.user.id if is_teacher else False
+        is_parent_owner = submission.student.parent_user.user.id == request.user.id if (is_parent and submission.student.parent_user) else False
         
-        if not (is_owner or is_exercise_teacher):
+        if not (is_owner or is_exercise_teacher or is_parent_owner):
             return Response({'detail': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         
         if submission.submission_file:
@@ -1116,6 +1216,46 @@ class ParentAssignExerciseView(APIView):
         exercise.students.add(student)
         
         return Response({'detail': 'Exercise successfully assigned to student'}, status=status.HTTP_200_OK)
+
+
+class ParentSubmissionsView(APIView):
+   
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        if not has_role(request.user, 'PARENT'):
+            return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+            
+        try:
+            parent = ParentProfile.objects.get(user=request.user)
+        except ParentProfile.DoesNotExist:
+            return Response({'detail': 'Parent profile not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+        student_id = request.query_params.get('student_id')
+        
+        if student_id:
+            try:
+                children = StudentProfile.objects.filter(id=int(student_id), parent_user=parent)
+            except ValueError:
+                return Response({'detail': 'Invalid student_id'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            children = parent.children.all()
+            
+        submissions = []
+        for child in children:
+            child_submissions = ExerciseSubmission.objects.filter(
+                student=child,
+                exercise__students=child
+            )
+            submissions.extend(child_submissions)
+            
+        # Sort by submitted_at descending
+        submissions.sort(key=lambda s: s.submitted_at, reverse=True)
+        
+        serializer = ExerciseSubmissionSerializer(submissions, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
 
 
 class TeacherAttendanceView(APIView):
