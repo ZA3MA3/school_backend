@@ -24,7 +24,7 @@ import hashlib
 import hmac
 import json
 from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer, AttendanceSerializer, NotificationSerializer, SkillSerializer, EnrollmentSerializer
-from .models import User, Class, ClassTeacher, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus, PhoneOTP, Role, Payment
+from .models import User, Class, ClassTeacher, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus, PhoneOTP, Role, Payment, Level
 from django_ratelimit.decorators import ratelimit
 
 
@@ -215,25 +215,40 @@ class RefreshTokenView(APIView):
             )
 
 
+
 class TeacherClassesView(APIView):
     """
-    Get all classes taught by the current teacher
+    Get all classes taught by the current teacher with their associated levels
     """
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
-        
+
         try:
             teacher = TeacherProfile.objects.get(user=request.user)
         except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        
-        classes = Class.objects.filter(teachers=teacher)
-        serializer = ClassSerializer(classes, many=True)
-        return Response(serializer.data)
 
+        # Get classes through the ClassTeacher junction table to access level
+        class_teacher_entries = ClassTeacher.objects.filter(teacher=teacher).select_related('class_obj', 'level')
+
+        # Build response with level information
+        data = []
+        for ct in class_teacher_entries:
+            data.append({
+                'id': ct.class_obj.id,
+                'name': ct.class_obj.name,
+                'description': ct.class_obj.description,
+                'level_id': ct.level.id if ct.level else None,
+                'level_name': ct.level.name if ct.level else None,
+                'teacher_id': ct.teacher.id,
+                'teacher_name': ct.teacher.user.get_full_name,
+
+            })
+
+        return Response(data)
 
 class TeacherEnrollmentsView(APIView):
     """
@@ -315,78 +330,139 @@ class TeacherEnrollmentsView(APIView):
             return Response({'detail': 'Enrollment rejected', 'status': 'REJECTED'})
 
 
+
+
 class TeacherExercisesView(APIView):
     """
     Create exercise or list exercises for teacher's classes
     """
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
-    
+
     def get(self, request):
         if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
-        
+
         try:
             teacher = TeacherProfile.objects.get(user=request.user)
         except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        
+
         exercises = Exercise.objects.filter(teacher=teacher)
         serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
         return Response(serializer.data)
-    
+
     def post(self, request):
         if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can create exercises'}, status=status.HTTP_403_FORBIDDEN)
-        
+
         try:
             teacher = TeacherProfile.objects.get(user=request.user)
         except TeacherProfile.DoesNotExist:
             return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        
+
         serializer = ExerciseSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             exercise = serializer.save(teacher=teacher)
-            
+
             # Handle skills manually for FormData
             skills_ids = request.data.getlist('skills')
             if skills_ids:
                 skill_ids = [int(sid) for sid in skills_ids if sid.isdigit()]
                 if skill_ids:
                     exercise.skills.set(skill_ids)
-            
-            # Create notifications for students in the class
+
+            # ✅ FIX: Create notifications for students in the class (using correct relationship)
             if exercise.related_class:
-                students = exercise.related_class.students.all()
+                # Get students through Enrollment model (approved enrollments only)
+                students = StudentProfile.objects.filter(
+                    enrollments__class_teacher__class_obj=exercise.related_class,
+                    enrollments__status=EnrollmentStatus.APPROVED
+                ).distinct()
+
                 for student in students:
-                    Notification.objects.create(
-                        recipient=student.user,
-                        type='EXERCISE',
-                        message=f"New exercise uploaded: {exercise.title} in {exercise.related_class.name}"
-                    )
-                    send_notification_update(student.user.id)
-            
+                    if student.user:
+                        Notification.objects.create(
+                            recipient=student.user,
+                            type='EXERCISE',
+                            message=f"New exercise uploaded: {exercise.title} in {exercise.related_class.name}"
+                        )
+                        send_notification_update(student.user.id)
+
+                    # Also notify parents if they exist
+                    if student.parent_user and student.parent_user.user:
+                        Notification.objects.create(
+                            recipient=student.parent_user.user,
+                            type='EXERCISE',
+                            message=f"New exercise '{exercise.title}' assigned to your child in {exercise.related_class.name}"
+                        )
+                        send_notification_update(student.parent_user.user.id)
+
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class AdminExercisesView(APIView):
+    """
+    Create exercise or list exercises for admin (no teacher association).
+    GET returns exercises with null teacher (admin-created).
+    POST creates an exercise without a teacher.
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get(self, request):
+        if not has_role(request.user, 'ADMIN'):
+            return Response({'detail': 'Only admins can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+
+        exercises = Exercise.objects.filter(teacher__isnull=True)
+        serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    def post(self, request):
+        if not has_role(request.user, "ADMIN"):
+            return Response({'detail': 'Only admins can create exercises'}, status=status.HTTP_403_FORBIDDEN)
+
+        data = request.data.copy()
+
+        serializer = ExerciseSerializer(data=data, context={'request': request})
+        if serializer.is_valid():
+            exercise = serializer.save()
+
+            # Handle skills manually for FormData
+            skills_ids = request.data.getlist('skills')
+            if skills_ids:
+                skill_ids = [int(sid) for sid in skills_ids if sid.isdigit()]
+                if skill_ids:
+                    exercise.skills.set(skill_ids)
+
+
+
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class AllClassesView(APIView):
     """
-    Get all available classes (for students to browse and enroll)
+    Get all available classes (for students to browse and enroll, or admins to assign exercises)
     """
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        if not has_role(request.user, 'STUDENT'):
+        if not has_role(request.user, 'STUDENT') and not has_role(request.user, 'ADMIN'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
         
         student_id = request.query_params.get('student_id')
+        level_id = request.query_params.get('level_id')
         
         context = {'request': request}
         if student_id:
             context['student_id'] = int(student_id)
         
         classes = Class.objects.all()
+        if level_id:
+            try:
+                classes = classes.filter(levels__id=int(level_id))
+            except ValueError:
+                pass
         serializer = ClassSerializer(classes, many=True, context=context)
         return Response(serializer.data)
 
@@ -1143,52 +1219,7 @@ class ParentAnnouncementView(APIView):
         
         return Response(announcements)
 
-"""
-class ParentSearchExercisesView(APIView):
-    
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        if not has_role(request.user, 'PARENT'):
-            return Response({'detail': 'Only parents can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
-            
-        student_id = request.query_params.get('student_id')
-        if not student_id:
-            return Response({'detail': 'student_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        level = request.query_params.get('level')
-        class_name = request.query_params.get('class_name')
-        
-        try:
-            parent = ParentProfile.objects.get(user=request.user)
-            student = StudentProfile.objects.get(id=int(student_id), parent_user=parent)
-        except ParentProfile.DoesNotExist:
-            return Response({'detail': 'Parent profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        except (StudentProfile.DoesNotExist, ValueError):
-            return Response({'detail': 'Child student not found'}, status=status.HTTP_404_NOT_FOUND)
-            
-        # Get teachers of classes the child is approved to be in
-        enrolled_teacher_ids = Enrollment.objects.filter(
-            student=student,
-            status=EnrollmentStatus.APPROVED
-        ).values_list('class_teacher__teacher_id', flat=True)
-        
-        # Get exercises NOT uploaded by those teachers
-        exercises = Exercise.objects.exclude(teacher_id__in=enrolled_teacher_ids)
-        
-        # Apply filters
-        if level:
-            exercises = exercises.filter(level__name=level)
-        if class_name:
-            exercises = exercises.filter(class_name__icontains=class_name)
-        
-        serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
-        # Mark each exercise as assigned if student is in the exercise's students ManyToMany relation
-        data = []
-        for ex, serialized in zip(exercises, serializer.data):
-            serialized['is_assigned'] = ex.students.filter(id=student.id).exists()
-            data.append(serialized)
-        return Response(data)"""
+
 
 
 class ParentSearchExercisesView(APIView):

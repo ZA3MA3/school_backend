@@ -129,18 +129,24 @@ class SkillSerializer(serializers.ModelSerializer):
 
 
 class ExerciseSerializer(serializers.ModelSerializer):
-    teacher_name = serializers.CharField(source='teacher.get_full_name', read_only=True)
+    teacher_name = serializers.SerializerMethodField()
     class_name = serializers.CharField(source='related_class.name', read_only=True)
     file_url = serializers.SerializerMethodField()
     skills = serializers.SerializerMethodField()
     level = serializers.SerializerMethodField()
+    level_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     
     class Meta:
         model = Exercise
         fields = ['id', 'title', 'description', 'file_path', 'file_url', 'teacher', 'teacher_name',
-                  'related_class', 'class_name', 'due_date', 'skills', 'level']
+                  'related_class', 'class_name', 'due_date', 'skills', 'level', 'level_id']
         read_only_fields = ['id', 'teacher']
-        
+    
+    def get_teacher_name(self, obj):
+        if obj.teacher:
+            return obj.teacher.get_full_name
+        return None
+
     def get_level(self, obj):
         if obj.level:
             return obj.level.name
@@ -156,6 +162,9 @@ class ExerciseSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         skills_data = validated_data.pop('skills', [])
+        level_id = validated_data.pop('level_id', None)
+        if level_id is not None:
+            validated_data['level_id'] = level_id
         exercise = Exercise.objects.create(**validated_data)
         if skills_data:
             exercise.skills.set(skills_data)

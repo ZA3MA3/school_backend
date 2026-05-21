@@ -290,7 +290,9 @@ class Exercise(models.Model):
     teacher = models.ForeignKey(
         TeacherProfile,
         on_delete=models.CASCADE,
-        related_name='uploaded_exercises'
+        related_name='uploaded_exercises',
+        null=True,
+        blank=True
     )
     related_class = models.ForeignKey(
         Class,

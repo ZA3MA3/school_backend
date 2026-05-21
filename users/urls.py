@@ -12,7 +12,8 @@ from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    SkillListView, StudentPredictionView, contact_view, SendOTPView, VerifyOTPView,
                    GoogleAuthView, TeacherProfileCreateView, ParentStudentCreateView,
                    PhoneLoginSendView, PhoneLoginVerifyView, GoogleLoginOnlyView,
-                   CreateCheckoutView, chargily_webhook, SubscriptionStatusView)
+                   CreateCheckoutView, chargily_webhook, SubscriptionStatusView,
+                   AdminExercisesView)
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
@@ -25,7 +26,9 @@ urlpatterns = [
     path('teacher/exercises/', TeacherExercisesView.as_view(), name='teacher_exercises'),
     path('teacher/submissions/', TeacherSubmissionsView.as_view(), name='teacher_submissions'),
     path('teacher/announcements/', TeacherAnnouncementView.as_view(), name='teacher_announcements'),
-    path('teacher/attendance/', TeacherAttendanceView.as_view(), name='teacher_attendance'),
+path('teacher/attendance/', TeacherAttendanceView.as_view(), name='teacher_attendance'),
+    # Admin endpoints
+    path('admin/exercises/', AdminExercisesView.as_view(), name='admin_exercises'),
     # Student endpoints
     path('classes/', AllClassesView.as_view(), name='all_classes'),
     path('student/enroll/', StudentEnrollView.as_view(), name='student_enroll'),
