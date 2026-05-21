@@ -1226,12 +1226,17 @@ class ParentSearchExercisesView(APIView):
         # Get exercises NOT uploaded by those teachers
         exercises = Exercise.objects.exclude(teacher_id__in=enrolled_teacher_ids)
 
-        # Apply filters
+# Apply filters
         if level:
             exercises = exercises.filter(level__name=level)
         if class_name:
             # Filter by the related_class's name
             exercises = exercises.filter(related_class__name__icontains=class_name)
+        skill_ids = request.query_params.get('skill_ids')
+        if skill_ids:
+            skill_id_list = [int(s) for s in skill_ids.split(',') if s.strip().isdigit()]
+            if skill_id_list:
+                exercises = exercises.filter(skills__id__in=skill_id_list).distinct()
 
         serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
         # Mark each exercise as assigned if student is in the exercise's students ManyToMany relation
