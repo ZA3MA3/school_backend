@@ -24,7 +24,7 @@ import hashlib
 import hmac
 import json
 from .serializers import LoginSerializer, ClassSerializer, ExerciseSerializer, ExerciseSubmissionSerializer, MessageSerializer, AnnouncementSerializer, AttendanceSerializer, NotificationSerializer, SkillSerializer, EnrollmentSerializer
-from .models import User, Class, ClassTeacher, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus, PhoneOTP, Role, Payment, Level
+from .models import User, Class, ClassTeacher, Exercise, ExerciseSubmission, StudentProfile, TeacherProfile, ParentProfile, Message, Announcement, Attendance, Notification, Skill, ContactUs, Enrollment, EnrollmentStatus, PhoneOTP, Role, Payment, Level, ExerciseStatus
 from django_ratelimit.decorators import ratelimit
 
 
@@ -245,7 +245,10 @@ class TeacherClassesView(APIView):
                 'level_name': ct.level.name if ct.level else None,
                 'teacher_id': ct.teacher.id,
                 'teacher_name': ct.teacher.user.get_full_name,
-
+                'student_count': Enrollment.objects.filter(
+                    class_teacher__class_obj=ct.class_obj,
+                    status=EnrollmentStatus.APPROVED
+                ).count(),
             })
 
         return Response(data)
@@ -401,6 +404,87 @@ class TeacherExercisesView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+class AdminExerciseModerationView(APIView):
+    """
+    GET: List pending exercise requests from teachers
+    PATCH: Approve or reject a pending exercise
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not has_role(request.user, 'ADMIN'):
+            return Response({'detail': 'Only admins can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+
+        exercises = Exercise.objects.filter(
+            status=ExerciseStatus.PENDING,
+            teacher__isnull=False
+        ).select_related('teacher__user', 'related_class')
+
+        data = []
+        for exercise in exercises:
+            data.append({
+                'id': exercise.id,
+                'title': exercise.title,
+                'description': exercise.description,
+                'teacher_name': exercise.teacher.user.get_full_name if exercise.teacher else None,
+                'class_name': exercise.related_class.name if exercise.related_class else None,
+                'status': exercise.status,
+                'created_at': exercise.created_at,
+            })
+
+        return Response(data)
+
+    def patch(self, request):
+        if not has_role(request.user, 'ADMIN'):
+            return Response({'detail': 'Only admins can moderate exercises'}, status=status.HTTP_403_FORBIDDEN)
+
+        exercise_id = request.data.get('exercise_id')
+        action = request.data.get('action')
+
+        if not exercise_id or not action:
+            return Response({'detail': 'exercise_id and action are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if action not in ['approve', 'reject']:
+            return Response({'detail': 'action must be approve or reject'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            exercise = Exercise.objects.get(id=exercise_id, teacher__isnull=False)
+        except Exercise.DoesNotExist:
+            return Response({'detail': 'Exercise not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if exercise.status != ExerciseStatus.PENDING:
+            return Response({'detail': 'Exercise has already been reviewed'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if action == 'approve':
+            exercise.status = ExerciseStatus.APPROVED
+            exercise.save()
+
+            # Notify the teacher
+            if exercise.teacher and exercise.teacher.user:
+                Notification.objects.create(
+                    recipient=exercise.teacher.user,
+                    type='EXERCISE',
+                    message=f"Your exercise '{exercise.title}' has been approved"
+                )
+                send_notification_update(exercise.teacher.user.id)
+
+            return Response({'detail': 'Exercise approved', 'status': 'APPROVED'})
+        else:
+            exercise.status = ExerciseStatus.REJECTED
+            exercise.save()
+
+            if exercise.teacher and exercise.teacher.user:
+                Notification.objects.create(
+                    recipient=exercise.teacher.user,
+                    type='EXERCISE',
+                    message=f"Your exercise '{exercise.title}' has been rejected"
+                )
+                send_notification_update(exercise.teacher.user.id)
+
+            return Response({'detail': 'Exercise rejected', 'status': 'REJECTED'})
+
+
 class AdminExercisesView(APIView):
     """
     Create exercise or list exercises for admin (no teacher association).
@@ -414,7 +498,7 @@ class AdminExercisesView(APIView):
         if not has_role(request.user, 'ADMIN'):
             return Response({'detail': 'Only admins can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
 
-        exercises = Exercise.objects.filter(teacher__isnull=True)
+        exercises = Exercise.objects.filter(teacher__isnull=True, status=ExerciseStatus.APPROVED)
         serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
         return Response(serializer.data)
 
@@ -537,18 +621,16 @@ class StudentEnrollView(APIView):
 
 
 class StudentExercisesView(APIView):
-    """
-    Get exercises for classes a student is enrolled in
-    """
+
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         if not has_role(request.user, 'STUDENT'):
             return Response({'detail': 'Only students can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
-        
+
         # Get all exercises from classes the student is enrolled in
         student_id = request.query_params.get('student_id')
-        
+
         if student_id:
             try:
                 student = StudentProfile.objects.get(id=int(student_id), parent_user__user=request.user)
@@ -559,16 +641,18 @@ class StudentExercisesView(APIView):
                 student = StudentProfile.objects.get(user=request.user)
             except StudentProfile.DoesNotExist:
                 return Response({'detail': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        
+
         enrolled_class_ids = Enrollment.objects.filter(
             student=student,
             status=EnrollmentStatus.APPROVED
         ).values_list('class_teacher__class_obj_id', flat=True)
         exercises = Exercise.objects.filter(
-            models.Q(related_class__in=enrolled_class_ids) | models.Q(students=student)
+            models.Q(related_class__in=enrolled_class_ids, teacher__isnull=False, status=ExerciseStatus.APPROVED) | models.Q(students=student, status=ExerciseStatus.APPROVED)
         ).distinct()
+
         serializer = ExerciseSerializer(exercises, many=True, context={'request': request})
         return Response(serializer.data)
+
 
 
 class StudentSubmissionView(APIView):

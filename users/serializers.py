@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, TeacherProfile, ParentProfile, StudentProfile, Class, Exercise, ExerciseSubmission, Message, Announcement, Attendance, Notification, Skill, Enrollment, EnrollmentStatus
+from .models import User, TeacherProfile, ParentProfile, StudentProfile, Class, Exercise, ExerciseSubmission, Message, Announcement, Attendance, Notification, Skill, Enrollment, EnrollmentStatus, ExerciseStatus
 
 
 class LoginSerializer(serializers.Serializer):
@@ -138,8 +138,8 @@ class ExerciseSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Exercise
-        fields = ['id', 'title', 'description', 'file_path', 'file_url', 'teacher', 'teacher_name',
-                  'related_class', 'class_name', 'due_date', 'skills', 'level', 'level_id']
+        fields = ["id", "title", "description", "file_path", "file_url", "teacher", "teacher_name",
+                  'related_class', 'class_name', 'due_date', 'skills', 'level', 'level_id', 'status', 'created_at']
         read_only_fields = ['id', 'teacher']
     
     def get_teacher_name(self, obj):

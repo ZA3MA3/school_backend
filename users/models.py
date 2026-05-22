@@ -233,6 +233,12 @@ class EnrollmentStatus(models.TextChoices):
     REJECTED = 'REJECTED', 'Rejected'
 
 
+class ExerciseStatus(models.TextChoices):
+    PENDING = 'PENDING', 'Pending'
+    APPROVED = 'APPROVED', 'Approved'
+    REJECTED = 'REJECTED', 'Rejected'
+
+
 class Enrollment(models.Model):
     """
     Enrollment requests - links students to class-teacher assignments with approval workflow
@@ -321,6 +327,12 @@ class Exercise(models.Model):
         db_table='student_exercises'
     )
     due_date = models.DateField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=ExerciseStatus.choices,
+        default=ExerciseStatus.PENDING
+    )
+    created_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'exercises'

@@ -13,7 +13,7 @@ from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    GoogleAuthView, TeacherProfileCreateView, ParentStudentCreateView,
                    PhoneLoginSendView, PhoneLoginVerifyView, GoogleLoginOnlyView,
                    CreateCheckoutView, chargily_webhook, SubscriptionStatusView,
-                   AdminExercisesView)
+                   AdminExercisesView, AdminExerciseModerationView)
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
@@ -29,6 +29,7 @@ urlpatterns = [
 path('teacher/attendance/', TeacherAttendanceView.as_view(), name='teacher_attendance'),
     # Admin endpoints
     path('admin/exercises/', AdminExercisesView.as_view(), name='admin_exercises'),
+    path('admin/exercises/moderate/', AdminExerciseModerationView.as_view(), name='admin_exercise_moderation'),
     # Student endpoints
     path('classes/', AllClassesView.as_view(), name='all_classes'),
     path('student/enroll/', StudentEnrollView.as_view(), name='student_enroll'),
