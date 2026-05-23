@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    TeacherClassesView, TeacherExercisesView, StudentExercisesView,
                    TeacherEnrollmentsView,
-                   StudentSubmissionView, ParentChildrenView, ParentSearchExercisesView, ParentAssignExerciseView, ParentSubmissionsView, DownloadExerciseView,
+                   StudentSubmissionView, ParentChildrenView, ParentSearchExercisesView, ParentAssignExerciseView, ParentSubmissionsView, DownloadExerciseView, PublicAllClassesView,
                    AllClassesView, StudentEnrollView, TeacherSubmissionsView,
                    DownloadSubmissionView, GradeSubmissionView, ChatContactsView,
                    ChatMessagesView, WSTicketView, TeacherAnnouncementView,
@@ -32,6 +32,7 @@ path('teacher/attendance/', TeacherAttendanceView.as_view(), name='teacher_atten
     path('admin/exercises/moderate/', AdminExerciseModerationView.as_view(), name='admin_exercise_moderation'),
     # Student endpoints
     path('classes/', AllClassesView.as_view(), name='all_classes'),
+    path('classes/public/', PublicAllClassesView.as_view(), name='public-classes'),
     path('student/enroll/', StudentEnrollView.as_view(), name='student_enroll'),
     path('student/exercises/', StudentExercisesView.as_view(), name='student_exercises'),
     path('student/submissions/', StudentSubmissionView.as_view(), name='student_submissions'),

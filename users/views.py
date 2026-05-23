@@ -524,6 +524,34 @@ class AdminExercisesView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class PublicAllClassesView(APIView):
+    """
+    Get all available classes (public endpoint - no auth required)
+    Used during signup process for students to browse classes
+    """
+    permission_classes = []  # No authentication required
+
+    def get(self, request):
+        level_id = request.query_params.get('level_id')
+
+        classes = Class.objects.all()
+        if level_id:
+            try:
+                classes = classes.filter(levels__id=int(level_id))
+            except ValueError:
+                pass
+
+        # Return plain data without serializer
+        data = []
+        for cls in classes:
+            data.append({
+                'id': cls.id,
+                'name': cls.name,
+                'description': cls.description,
+            })
+
+        return Response(data)
+
 class AllClassesView(APIView):
     """
     Get all available classes (for students to browse and enroll, or admins to assign exercises)
@@ -738,30 +766,6 @@ class StudentSubmissionView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-"""
-class TeacherSubmissionsView(APIView):
-    
-    #Get all submissions for exercises created by the teacher
-    
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        if not has_role(request.user, 'TEACHER'):
-            return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
-        
-        try:
-            teacher = TeacherProfile.objects.get(user=request.user)
-        except TeacherProfile.DoesNotExist:
-            return Response({'detail': 'Teacher profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        
-        # Get all exercises created by this teacher
-        teacher_exercises = Exercise.objects.filter(teacher=teacher)
-        
-        # Get all submissions for these exercises
-        submissions = ExerciseSubmission.objects.filter(exercise__in=teacher_exercises)
-        serializer = ExerciseSubmissionSerializer(submissions, many=True, context={'request': request})
-        return Response(serializer.data)
-"""
 
 
 class TeacherSubmissionsView(APIView):
@@ -1923,11 +1927,11 @@ class TeacherProfileCreateView(APIView):
     def post(self, request):
         hire_date = request.data.get('hire_date')
         specialization = request.data.get('specialization')
-        class_name = request.data.get('class_name')
-        class_description = request.data.get('class_description')
+        level_id = request.data.get('level_id')
+        class_id = request.data.get('class_id')
         
-        if not hire_date or not specialization or not class_name:
-            return Response({'detail': 'hire_date, specialization, and class_name are required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not hire_date or not specialization or not level_id or not class_id:
+            return Response({'detail': 'hire_date, specialization, level_id, and class_id are required'}, status=status.HTTP_400_BAD_REQUEST)
         
         user = request.user
         
@@ -1938,12 +1942,24 @@ class TeacherProfileCreateView(APIView):
             specialization=specialization
         )
         
-# Create class
-        class_obj = Class.objects.create(
-            name=class_name,
-            description=class_description or ''
+        # Get the existing class
+        try:
+            class_obj = Class.objects.get(id=class_id)
+        except Class.DoesNotExist:
+            return Response({'detail': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Create ClassTeacher record
+        from .models import ClassTeacher, Level
+        try:
+            level = Level.objects.get(id=level_id)
+        except Level.DoesNotExist:
+            return Response({'detail': 'Level not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        ClassTeacher.objects.create(
+            class_obj=class_obj,
+            teacher=teacher,
+            level=level
         )
-        class_obj.teachers.add(teacher)
         
         # Add TEACHER role
         teacher_role = Role.objects.get(name='TEACHER')
