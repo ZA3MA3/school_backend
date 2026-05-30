@@ -1830,39 +1830,32 @@ class GoogleAuthView(APIView):
     authentication_classes = []
     
     def post(self, request):
-        print(f"[DEBUG] GoogleAuthView called")
-        print(f"[DEBUG] Request data: {request.data}")
-        
         access_token = request.data.get('access_token')
         
         if not access_token:
-            print(f"[DEBUG] No access token in request")
+
             return Response({'detail': 'Access token is required'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        print(f"[DEBUG] Got access_token: {access_token[:20]}...")
+
         
         # Verify the token with Google's tokeninfo endpoint
         try:
             import requests
             token_info_url = 'https://oauth2.googleapis.com/tokeninfo'
             params = {'access_token': access_token}
-            print(f"[DEBUG] Calling Google tokeninfo endpoint...")
             resp = requests.get(token_info_url, params=params)
-            print(f"[DEBUG] Google response status: {resp.status_code}")
-            print(f"[DEBUG] Google response text: {resp.text}")
+
             
             if resp.status_code != 200:
                 return Response({'detail': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
             
             idinfo = resp.json()
-            print(f"[DEBUG] tokeninfo response: {idinfo}")
+
             email = idinfo.get('email')
             first_name = idinfo.get('given_name', '')
             last_name = idinfo.get('family_name', '')
-            print(f"[DEBUG] email={email}, first_name={first_name}, last_name={last_name}")
+
             
         except Exception as e:
-            print(f"[DEBUG] Exception: {str(e)}")
             import traceback
             traceback.print_exc()
             return Response({'detail': f'Token verification failed: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1876,8 +1869,7 @@ class GoogleAuthView(APIView):
                 'password': make_password(None),
             }
         )
-        print(f"[DEBUG] user found/created: {user.email}, created={created}")
-        
+
         # Check if this is a new user - set default role if needed
         if created:
             # Try to assign a default role (optional - you might want to adjust this)
@@ -2284,63 +2276,7 @@ class SubscriptionStatusView(APIView):
             'roles': list(user.roles.values_list('name', flat=True)),
         })
 
-from django.contrib.auth import get_user_model
 
-User = get_user_model()
-"""
-class CreateCheckoutView(APIView):
-    permission_classes = []  # No authentication required
-
-    def post(self, request):
-        amount = request.data.get('amount')
-        description = request.data.get('description', '')
-
-        if not amount:
-            return Response({'error': 'Amount required'}, status=400)
-
-        # Get user with ID 34
-        try:
-            user = User.objects.get(id=34)
-        except User.DoesNotExist:
-            return Response({'error': 'User with ID 34 not found'}, status=404)
-
-        response = requests.post(
-            f'{settings.CHARGILY_BASE_URL}/checkouts',
-            headers={
-                'Authorization': f'Bearer {settings.CHARGILY_API_KEY}',
-                'Content-Type': 'application/json',
-            },
-            json={
-                'amount': int(amount),
-                'currency': 'dzd',
-                'success_url': f'{settings.FRONTEND_URL}/payment/success',
-                'failure_url': f'{settings.FRONTEND_URL}/payment/failed',
-                'metadata': {
-                    'user_id': user.id,  # Now using user ID 34
-                    'description': description,
-                },
-                'description': description,
-            }
-        )
-
-        if not response.ok:
-            return Response({'error': 'Failed to create checkout'}, status=500)
-
-        data = response.json()
-
-        Payment.objects.create(
-            user=user,  # Using user ID 34 instead of request.user
-            checkout_id=data['id'],
-            amount=amount,
-            status='pending',
-            description=description,
-        )
-
-        return Response({
-            'checkout_url': data['checkout_url'],
-            'checkout_id': data['id'],
-        })
-"""
 @csrf_exempt
 @require_POST
 def chargily_webhook(request):

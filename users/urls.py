@@ -26,7 +26,7 @@ urlpatterns = [
     path('teacher/exercises/', TeacherExercisesView.as_view(), name='teacher_exercises'),
     path('teacher/submissions/', TeacherSubmissionsView.as_view(), name='teacher_submissions'),
     path('teacher/announcements/', TeacherAnnouncementView.as_view(), name='teacher_announcements'),
-path('teacher/attendance/', TeacherAttendanceView.as_view(), name='teacher_attendance'),
+    path('teacher/attendance/', TeacherAttendanceView.as_view(), name='teacher_attendance'),
     # Admin endpoints
     path('admin/exercises/', AdminExercisesView.as_view(), name='admin_exercises'),
     path('admin/exercises/moderate/', AdminExerciseModerationView.as_view(), name='admin_exercise_moderation'),
@@ -60,7 +60,7 @@ path('teacher/attendance/', TeacherAttendanceView.as_view(), name='teacher_atten
     path('notifications/unread-count/', NotificationUnreadCountView.as_view(), name='notifications_unread_count'),
     path('notifications/<int:notification_id>/read/', NotificationMarkReadView.as_view(), name='notification_mark_read'),
     # Skills endpoint
-path('skills/', SkillListView.as_view(), name='skills'),
+    path('skills/', SkillListView.as_view(), name='skills'),
     # Prediction endpoint
     path('predict/student/<int:student_id>/', StudentPredictionView.as_view(), name='student_prediction'),
     # Contact Us endpoint
