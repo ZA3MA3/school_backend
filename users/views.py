@@ -234,9 +234,15 @@ class TeacherClassesView(APIView):
         # Get classes through the ClassTeacher junction table to access level
         class_teacher_entries = ClassTeacher.objects.filter(teacher=teacher).select_related('class_obj', 'level')
 
-        # Build response with level information
+        # Build response with level information AND students
         data = []
         for ct in class_teacher_entries:
+            # Get all approved students in this class
+            students = StudentProfile.objects.filter(
+                enrollments__class_teacher=ct,
+                enrollments__status=EnrollmentStatus.APPROVED
+            ).distinct()
+
             data.append({
                 'id': ct.class_obj.id,
                 'name': ct.class_obj.name,
@@ -245,10 +251,15 @@ class TeacherClassesView(APIView):
                 'level_name': ct.level.name if ct.level else None,
                 'teacher_id': ct.teacher.id,
                 'teacher_name': ct.teacher.user.get_full_name,
-                'student_count': Enrollment.objects.filter(
-                    class_teacher__class_obj=ct.class_obj,
-                    status=EnrollmentStatus.APPROVED
-                ).count(),
+                'student_count': students.count(),
+                'students': [
+                    {
+                        'id': s.id,
+                        'full_name': s.get_full_name,
+                        'user_id': s.user_id
+                    }
+                    for s in students
+                ]
             })
 
         return Response(data)
@@ -1437,11 +1448,9 @@ class ParentSubmissionsView(APIView):
 
 
 
-
+"""
 class TeacherAttendanceView(APIView):
-    """
-    Post attendance for students in a class, or get attendance for a class on a date
-    """
+   
     def get(self, request):
         if not has_role(request.user, 'TEACHER'):
             return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
@@ -1525,6 +1534,154 @@ class TeacherAttendanceView(APIView):
         if errors:
             return Response({'detail': 'Some records failed', 'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
         
+        serializer = AttendanceSerializer(created_records, many=True)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+"""
+class TeacherAttendanceView(APIView):
+    def get(self, request):
+        if not has_role(request.user, 'TEACHER'):
+            return Response({'detail': 'Only teachers can access this endpoint'}, status=status.HTTP_403_FORBIDDEN)
+
+        class_id = request.query_params.get('class_id')
+        date = request.query_params.get('date')
+
+        if not class_id or not date:
+            return Response({'detail': 'class_id and date are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            teacher = TeacherProfile.objects.get(user=request.user)
+
+            # ✅ Verify teacher teaches this class
+            class_teacher_exists = ClassTeacher.objects.filter(
+                class_obj_id=class_id,
+                teacher=teacher
+            ).exists()
+
+            print(f"Teacher: {teacher.user.email}")
+            print(f"Class ID: {class_id}")
+            print(f"ClassTeacher exists: {class_teacher_exists}")
+
+            if not class_teacher_exists:
+                return Response({'detail': 'Class not found or you are not the teacher of this class'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            related_class = Class.objects.get(id=class_id)
+            print(f"Related class: {related_class.name}")
+
+
+        except (TeacherProfile.DoesNotExist, Class.DoesNotExist):
+            return Response({'detail': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # ✅ Get all approved students in this class
+        students = StudentProfile.objects.filter(
+            enrollments__class_teacher__class_obj=related_class,
+            enrollments__status='APPROVED'
+        ).distinct()
+
+        print(f"Students found: {students.count()}")
+
+        # ✅ Get existing attendance records for this date
+        attendance_records = {
+            record.student_id: record
+            for record in Attendance.objects.filter(related_class=related_class, date=date)
+        }
+
+        # ✅ Build response with all students and their attendance status
+        data = []
+        for student in students:
+            attendance = attendance_records.get(student.id)
+            data.append({
+                'id': attendance.id if attendance else None,
+                'student_id': student.id,
+                'student_name': student.get_full_name,
+                'related_class': related_class.id,
+                'class_name': related_class.name,
+                'date': date,
+                'status': attendance.status if attendance else None,  # None means not marked yet
+                'marked_by': attendance.marked_by_id if attendance else None,
+                'marked_by_name': attendance.marked_by.user.get_full_name if attendance and attendance.marked_by else None,
+                'marked_at': attendance.marked_at if attendance else None,
+                'is_marked': attendance is not None
+            })
+
+        return Response(data)
+
+    def post(self, request):
+        if not has_role(request.user, 'TEACHER'):
+            return Response({'detail': 'Only teachers can mark attendance'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            teacher = TeacherProfile.objects.get(user=request.user)
+        except TeacherProfile.DoesNotExist:
+            return Response({'detail': 'Teacher not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        records = request.data.get('records', [])
+        if not records:
+            return Response({'detail': 'No attendance records provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        created_records = []
+        errors = []
+        for record in records:
+            student_id = record.get('student_id')
+            class_id = record.get('class_id')
+            date = record.get('date')
+            status_val = record.get('status')
+
+            if not all([student_id, class_id, date, status_val]):
+                errors.append(f'Missing required fields for record: {record}')
+                continue
+
+            try:
+                # ✅ Verify teacher teaches this class
+                class_teacher_exists = ClassTeacher.objects.filter(
+                    class_obj_id=class_id,
+                    teacher=teacher
+                ).exists()
+
+                if not class_teacher_exists:
+                    errors.append(f'Teacher does not teach class {class_id}')
+                    continue
+
+                related_class = Class.objects.get(id=class_id)
+                student = StudentProfile.objects.get(id=student_id)
+
+            except (Class.DoesNotExist, StudentProfile.DoesNotExist) as e:
+                errors.append(f'Record not found: {e}')
+                continue
+
+            attendance, created = Attendance.objects.update_or_create(
+                student=student,
+                related_class=related_class,
+                date=date,
+                defaults={
+                    'status': status_val,
+                    'marked_by': teacher
+                }
+            )
+            created_records.append(attendance)
+
+            if status_val == 'ABSENT':
+                # Only create notification if student has a user account
+                if student.user:
+                    Notification.objects.create(
+                        recipient=student.user,
+                        type='ABSENCE',
+                        message=f"You were marked absent in {related_class.name} on {date}"
+                    )
+                    send_notification_update(student.user.id)
+
+                # Also notify parent if they exist and have a user
+                if student.parent_user and student.parent_user.user:
+                    Notification.objects.create(
+                        recipient=student.parent_user.user,
+                        type='ABSENCE',
+                        message=f"{student.get_full_name} was marked absent in {related_class.name} on {date}"
+                    )
+                    send_notification_update(student.parent_user.user.id)
+
+            if errors:
+                return Response({'detail': 'Some records failed', 'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = AttendanceSerializer(created_records, many=True)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
