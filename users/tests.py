@@ -1,7 +1,7 @@
 from django.test import TestCase
 from rest_framework.test import APIClient, APITestCase
 from rest_framework import status
-from .models import User, Role
+from .models import User, RoleChoices
 
 
 class EssentialTests(APITestCase):
@@ -10,16 +10,16 @@ class EssentialTests(APITestCase):
 
         # Create a teacher for testing
         self.teacher = User.objects.create_user(
-            username='teacher1',
+            email='teacher1@example.com',
             password='teacher123',
-            role=Role.TEACHER
+            roles=[RoleChoices.TEACHER]
         )
 
         # Create a student for testing
         self.student = User.objects.create_user(
-            username='student1',
+            email='student1@example.com',
             password='student123',
-            role=Role.STUDENT
+            roles=[RoleChoices.STUDENT]
         )
 
     # ============================================
@@ -28,22 +28,22 @@ class EssentialTests(APITestCase):
     def test_1_create_user_successful(self):
         """TEST 1: Creating a user works correctly"""
         user = User.objects.create_user(
-            username='newteacher',
+            email='newteacher@example.com',
             password='password123',
-            role=Role.TEACHER
+            roles=[RoleChoices.TEACHER]
         )
 
-        self.assertEqual(user.username, 'newteacher')
-        self.assertEqual(user.role, Role.TEACHER)
+        self.assertEqual(user.email, 'newteacher@example.com')
+        self.assertTrue(user.roles.filter(name=RoleChoices.TEACHER).exists())
         self.assertTrue(user.check_password('password123'))
-        print("✅ TEST 1 PASSED: User creation works")
+        print(" TEST 1 PASSED: User creation works")
 
     # ============================================
     # TEST 2: Login with correct credentials
     # ============================================
     def test_2_login_with_valid_credentials(self):
         response = self.client.post('/api/users/login/', {
-            'username': 'teacher1',
+            'email': 'teacher1@example.com',
             'password': 'teacher123'
         })
 
@@ -52,23 +52,25 @@ class EssentialTests(APITestCase):
 
         # Check user data is returned
         self.assertIn('user', response.data)
-        self.assertEqual(response.data['user']['username'], 'teacher1')
+        self.assertEqual(response.data['user']['email'], 'teacher1@example.com')
 
-        # Check role is returned
-        self.assertEqual(response.data['role'], 'TEACHER')
+        # Check role is returned (roles is a list)
+        self.assertIn('roles', response.data)
+        self.assertIn('TEACHER', response.data['roles'])
 
         # Check cookies are set
         self.assertIn('access_token', response.cookies)
         self.assertIn('refresh_token', response.cookies)
 
-        print("✅ TEST 2 PASSED: Login with valid credentials works")
+        print(" TEST 2 PASSED: Login with valid credentials works")
+
 
     # ============================================
     # TEST 3: Login with wrong password fails
     # ============================================
     def test_3_login_with_wrong_password_fails(self):
         response = self.client.post('/api/users/login/', {
-            'username': 'teacher1',
+            'email': 'teacher1@example.com',
             'password': 'wrongpassword'
         })
 
@@ -78,51 +80,52 @@ class EssentialTests(APITestCase):
         # Should have error message
         self.assertIn('detail', response.data)
 
-        print("✅ TEST 3 PASSED: Wrong password is rejected")
+        print(" TEST 3 PASSED: Wrong password is rejected")
 
     # ============================================
     # TEST 4: Login with non-existent user fails
     # ============================================
     def test_4_login_with_nonexistent_user_fails(self):
         response = self.client.post('/api/users/login/', {
-            'username': 'doesnotexist',
+            'email': 'doesnotexist@example.com',
             'password': 'somepassword'
         })
 
         # Should return 401 Unauthorized
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-        print("✅ TEST 4 PASSED: Non-existent user is rejected")
+        print(" TEST 4 PASSED: Non-existent user is rejected")
 
     # ============================================
     # TEST 5: All roles can login
     # ============================================
     def test_5_all_roles_can_login(self):
         # Create users for each role (check if they exist first)
-        if not User.objects.filter(username='parent1').exists():
-            User.objects.create_user(username='parent1', password='pass123', role=Role.PARENT)
+        if not User.objects.filter(email='parent1@example.com').exists():
+            User.objects.create_user(email='parent1@example.com', password='pass123', roles=[RoleChoices.PARENT])
 
-        if not User.objects.filter(username='admin1').exists():
-            User.objects.create_user(username='admin1', password='pass123', role=Role.ADMIN)
+        if not User.objects.filter(email='admin1@example.com').exists():
+            User.objects.create_user(email='admin1@example.com', password='pass123', roles=[RoleChoices.ADMIN])
 
         # Test each role
         roles = [
-            ('teacher1', 'teacher123', 'TEACHER'),
-            ('student1', 'student123', 'STUDENT'),
-            ('parent1', 'pass123', 'PARENT'),
-            ('admin1', 'pass123', 'ADMIN')
+            ('teacher1@example.com', 'teacher123', 'TEACHER'),
+            ('student1@example.com', 'student123', 'STUDENT'),
+            ('parent1@example.com', 'pass123', 'PARENT'),
+            ('admin1@example.com', 'pass123', 'ADMIN')
         ]
 
-        for username, password, expected_role in roles:
+        for email, password, expected_role in roles:
             response = self.client.post('/api/users/login/', {
-                'username': username,
+                'email': email,
                 'password': password
             })
 
             self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertEqual(response.data['role'], expected_role)
+            self.assertIn('roles', response.data)  # ✅ Check roles exists
+            self.assertIn(expected_role, response.data['roles'])  # ✅ Check role in list
 
-        print("✅ TEST 5 PASSED: All 4 roles can login")
+        print(" TEST 5 PASSED: All 4 roles can login")
 
     # ============================================
     # TEST 6: Get current user when logged in
@@ -137,11 +140,12 @@ class EssentialTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Should return user data
-        self.assertEqual(response.data['username'], 'teacher1')
-        self.assertEqual(response.data['role'], 'TEACHER')
+        self.assertEqual(response.data['email'], 'teacher1@example.com')
+        self.assertIn('roles', response.data)  # ✅ Check roles exists
+        self.assertIn('TEACHER', response.data['roles'])  # ✅ Check role in list
         self.assertIn('id', response.data)
 
-        print("✅ TEST 6 PASSED: Can get current user when authenticated")
+        print(" TEST 6 PASSED: Can get current user when authenticated")
 
     # ============================================
     # TEST 7: Get current user without login fails
@@ -152,7 +156,7 @@ class EssentialTests(APITestCase):
         # Should return 401 Unauthorized
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-        print("✅ TEST 7 PASSED: Must be logged in to access /me/")
+        print(" TEST 7 PASSED: Must be logged in to access /me/")
 
     # ============================================
     # TEST 8: Logout works
@@ -160,7 +164,7 @@ class EssentialTests(APITestCase):
     def test_8_logout_works(self):
         # First login
         login_response = self.client.post('/api/users/login/', {
-            'username': 'teacher1',
+            'email': 'teacher1@example.com',
             'password': 'teacher123'  # Use raw password
         })
         self.assertEqual(login_response.status_code, status.HTTP_200_OK)
@@ -174,19 +178,19 @@ class EssentialTests(APITestCase):
         # Should have success message
         self.assertEqual(logout_response.data['detail'], 'Successfully logged out')
 
-        print("✅ TEST 8 PASSED: Logout works")
+        print(" TEST 8 PASSED: Logout works")
 
     # ============================================
-    # TEST 9: Login requires both username and password
+    # TEST 9: Login requires both email and password
     # ============================================
-    def test_9_login_requires_username_and_password(self):
+    def test_9_login_requires_email_and_password(self):
         # Missing password
         response1 = self.client.post('/api/users/login/', {
-            'username': 'teacher1'
+            'email': 'teacher1@example.com'
         })
         self.assertEqual(response1.status_code, status.HTTP_400_BAD_REQUEST)
 
-        # Missing username
+        # Missing email
         response2 = self.client.post('/api/users/login/', {
             'password': 'teacher123'
         })
@@ -196,4 +200,4 @@ class EssentialTests(APITestCase):
         response3 = self.client.post('/api/users/login/', {})
         self.assertEqual(response3.status_code, status.HTTP_400_BAD_REQUEST)
 
-        print("✅ TEST 9 PASSED: Login validates required fields")
+        print(" TEST 9 PASSED: Login validates required fields")

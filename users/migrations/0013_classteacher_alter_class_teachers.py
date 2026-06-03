@@ -30,6 +30,7 @@ class Migration(migrations.Migration):
             database_operations=[
                 migrations.RunSQL(
                     sql="""
+                    DROP TABLE IF EXISTS classes_teachers;
                     CREATE TABLE classes_teachers (
                         id SERIAL PRIMARY KEY,
                         class_id INTEGER NOT NULL REFERENCES classes(id) DEFERRABLE INITIALLY DEFERRED,
