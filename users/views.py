@@ -109,8 +109,8 @@ class LoginView(APIView):
                 key='access_token',
                 value=access_token,
                 httponly=True,
-                secure=not settings.DEBUG,
-                samesite='Lax',
+                secure=True,
+                samesite='None',
                 max_age=3600,
                 path='/'
             )
@@ -119,8 +119,8 @@ class LoginView(APIView):
                 key='refresh_token',
                 value=refresh_token,
                 httponly=True,
-                secure=not settings.DEBUG,
-                samesite='Lax',
+                secure=True,
+                samesite='None',
                 max_age=7 * 24 * 3600,
                 path='/'
             )
@@ -522,6 +522,8 @@ class AdminExercisesView(APIView):
         serializer = ExerciseSerializer(data=data, context={'request': request})
         if serializer.is_valid():
             exercise = serializer.save()
+            exercise.status = ExerciseStatus.APPROVED
+            exercise.save()
 
             # Handle skills manually for FormData
             skills_ids = request.data.getlist('skills')
@@ -1198,9 +1200,10 @@ class TeacherAnnouncementView(APIView):
         notified_parents = set()
         
         if announcement.related_class:
-            students = announcement.related_class.students.all().distinct()
-            for student in students:
-                if student.user_id not in notified_students:
+           students = StudentProfile.objects.filter(enrollments__class_teacher__class_obj=announcement.related_class, enrollments__status='APPROVED').distinct()
+
+           for student in students:
+                if student.user and student.user_id not in notified_students:
                     Notification.objects.create(
                         recipient=student.user,
                         type='ANNOUNCEMENT',
@@ -1208,8 +1211,8 @@ class TeacherAnnouncementView(APIView):
                     )
                     send_notification_update(student.user_id)
                     notified_students.add(student.user_id)
-                    
-                    if student.parent_user and student.parent_user.user_id not in notified_parents:
+
+                    if student.parent_user and  student.parent_user.user and student.parent_user.user_id not in notified_parents:
                         Notification.objects.create(
                             recipient=student.parent_user.user,
                             type='ANNOUNCEMENT',
@@ -1219,10 +1222,13 @@ class TeacherAnnouncementView(APIView):
                         notified_parents.add(student.parent_user.user_id)
         else:
             # Notify all students in teacher's classes
-            classes = Class.objects.filter(teachers=teacher)
-            for cls in classes:
-                for student in cls.students.all():
-                    if student.user_id not in notified_students:
+            students = StudentProfile.objects.filter(
+                enrollments__class_teacher__teacher=teacher,
+                enrollments__status='APPROVED'
+            ).distinct()
+
+            for student in students:
+                if student.user and student.user_id not in notified_students:
                         Notification.objects.create(
                             recipient=student.user,
                             type='ANNOUNCEMENT',
@@ -1231,7 +1237,7 @@ class TeacherAnnouncementView(APIView):
                         send_notification_update(student.user_id)
                         notified_students.add(student.user_id)
                         
-                        if student.parent_user and student.parent_user.user_id not in notified_parents:
+                        if student.parent_user and student.parent_user.user and student.parent_user.user_id not in notified_parents:
                             Notification.objects.create(
                                 recipient=student.parent_user.user,
                                 type='ANNOUNCEMENT',

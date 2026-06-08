@@ -61,10 +61,11 @@ class ClassSerializer(serializers.ModelSerializer):
     student_count = serializers.SerializerMethodField()
     students = serializers.SerializerMethodField()
     enrollment_status = serializers.SerializerMethodField()
+    class_teacher_id = serializers.IntegerField(source='id', read_only=True)
     
     class Meta:
         model = Class
-        fields = ['id', 'name', 'description', 'teachers', 'teacher_name', 'students', 'student_count', 'enrollment_status']
+        fields = ['id', 'name', 'description', 'teachers', 'teacher_name', 'students', 'student_count', 'enrollment_status','class_teacher_id']
         read_only_fields = ['id']
     
     def get_teacher_name(self, obj):
@@ -100,6 +101,7 @@ class ClassSerializer(serializers.ModelSerializer):
             if enrollment:
                 return {
                     'status': enrollment.status,
+                    'class_teacher_id': enrollment.class_teacher.id,
                     'requested_at': enrollment.requested_at.isoformat() if enrollment.requested_at else None,
                     'responded_at': enrollment.responded_at.isoformat() if enrollment.responded_at else None
                 }
