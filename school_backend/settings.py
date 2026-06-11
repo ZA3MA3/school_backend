@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from decouple import config
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -49,6 +50,7 @@ DEBUG = True
 ALLOWED_HOSTS = ['localhost', '127.0.0.1','rendering-rebate-headcount.ngrok-free.dev']
 
 
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -80,6 +82,8 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5000",
+    "http://127.0.0.1:5000"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -135,14 +139,15 @@ RATELIMIT_USE_CACHE = 'ratelimit'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
+   """ 'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'school_db_4',
         'USER': 'postgres',
         'PASSWORD': 'admin123',
         'HOST': 'localhost',
         'PORT': '5432',
-    }
+    }"""
+'default': dj_database_url.parse(config('DATABASE_URL'))
 }
 
 
@@ -207,13 +212,11 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'AUTH_COOKIE': 'access_token',
-    'AUTH_COOKIE_SECURE': not DEBUG,
+    'AUTH_COOKIE_SECURE': True,
     'AUTH_COOKIE_HTTP_ONLY': True,
     'AUTH_COOKIE_PATH': '/',
-    'AUTH_COOKIE_SAMESITE': 'Lax',
+    'AUTH_COOKIE_SAMESITE': 'None',
 }
 
-
-
-
+#not DEBUG  'Lax'
 
