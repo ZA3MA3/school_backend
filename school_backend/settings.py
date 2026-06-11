@@ -47,7 +47,7 @@ else:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1','rendering-rebate-headcount.ngrok-free.dev','https://school-backend-9j8f.onrender.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1','rendering-rebate-headcount.ngrok-free.dev','school-backend-9j8f.onrender.com']
 
 
 
