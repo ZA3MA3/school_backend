@@ -45,7 +45,7 @@ else:
     TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1','rendering-rebate-headcount.ngrok-free.dev']
 
