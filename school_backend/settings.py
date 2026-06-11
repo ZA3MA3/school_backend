@@ -139,7 +139,9 @@ RATELIMIT_USE_CACHE = 'ratelimit'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-   """ 'default': {
+  'default': dj_database_url.parse(config('DATABASE_URL'))
+}
+""" 'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'school_db_4',
         'USER': 'postgres',
@@ -147,8 +149,6 @@ DATABASES = {
         'HOST': 'localhost',
         'PORT': '5432',
     }"""
-'default': dj_database_url.parse(config('DATABASE_URL'))
-}
 
 
 # Password validation
