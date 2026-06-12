@@ -1442,7 +1442,7 @@ class ParentSubmissionsView(APIView):
         for child in children:
             child_submissions = ExerciseSubmission.objects.filter(
                 student=child,
-                exercise__students=child
+                #exercise__students=child
             )
             submissions.extend(child_submissions)
             
