@@ -2430,7 +2430,7 @@ class CreateCheckoutView(APIView):
 
 
 class SubscriptionStatusView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = []
 
     def get(self, request):
         user = request.user
