@@ -47,7 +47,7 @@ else:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1','rendering-rebate-headcount.ngrok-free.dev','school-backend-9j8f.onrender.com','school-frontend-h1ll.onrender.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1','rendering-rebate-headcount.ngrok-free.dev','school-backend-9j8f.onrender.com']
 
 
 
@@ -83,7 +83,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5000",
-    "http://127.0.0.1:5000"
+    "http://127.0.0.1:5000",
+    "https://school-frontend-h1ll.onrender.com"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
