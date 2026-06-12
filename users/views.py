@@ -191,8 +191,8 @@ class RefreshTokenView(APIView):
                 key='access_token',
                 value=access_token,
                 httponly=True,
-                secure=not settings.DEBUG,
-                samesite='Lax',
+                secure=True,
+                samesite='None',
                 max_age=3600,
                 path='/'
             )
@@ -200,8 +200,8 @@ class RefreshTokenView(APIView):
                 key='ws_token',
                 value=access_token,
                 httponly=False,
-                secure=not settings.DEBUG,
-                samesite='Lax',
+                secure=True,
+                samesite='None',
                 max_age=3600,
                 path='/'
             )
@@ -2061,14 +2061,16 @@ class GoogleAuthView(APIView):
             'access_token',
             str(refresh.access_token),
             httponly=True,
-            samesite='Lax',
+            secure=True,
+            samesite='None',
             max_age=3600,
         )
         response.set_cookie(
             'refresh_token',
             str(refresh),
             httponly=True,
-            samesite='Lax',
+            secure=True,
+            samesite='None',
             max_age=7*24*3600,
         )
         
@@ -2284,14 +2286,16 @@ class PhoneLoginVerifyView(APIView):
             key='access_token',
             value=str(refresh.access_token),
             httponly=True,
-            samesite='Lax',
+            secure=True,
+            samesite='None',
             max_age=3600,
         )
         response.set_cookie(
             key='refresh_token',
             value=str(refresh),
             httponly=True,
-            samesite='Lax',
+            secure=True,
+            samesite='None',
             max_age=7*24*3600,
         )
         
@@ -2353,14 +2357,16 @@ class GoogleLoginOnlyView(APIView):
             key='access_token',
             value=str(refresh.access_token),
             httponly=True,
-            samesite='Lax',
+            secure=True,
+            samesite='None',
             max_age=3600,
         )
         response.set_cookie(
             key='refresh_token',
             value=str(refresh),
             httponly=True,
-            samesite='Lax',
+            secure=True,
+            samesite='None',
             max_age=7*24*3600,
         )
         
