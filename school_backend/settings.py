@@ -14,6 +14,7 @@ from pathlib import Path
 from decouple import config
 import dj_database_url
 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -89,7 +90,7 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 
-SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin-allow-popups"
+
 
 ROOT_URLCONF = 'school_backend.urls'
 
@@ -142,9 +143,11 @@ RATELIMIT_USE_CACHE = 'ratelimit'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-  'default': dj_database_url.parse(config('DATABASE_URL'))
+
+'default': dj_database_url.parse(config('DATABASE_URL'))
 }
-""" 'default': {
+""" """
+"""'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'school_db_4',
         'USER': 'postgres',
@@ -152,7 +155,6 @@ DATABASES = {
         'HOST': 'localhost',
         'PORT': '5432',
     }"""
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

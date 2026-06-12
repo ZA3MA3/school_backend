@@ -19,6 +19,8 @@ class UsersConfig(AppConfig):
     name = 'users'
 
     def ready(self):
+        #return
+
         global model, scaler, label_encoder, feature_names
         
         logger.info("Loading ML model artifacts...")
@@ -67,7 +69,6 @@ class UsersConfig(AppConfig):
             feature_names = None
         
         logger.info("ML model artifacts loaded successfully")
-
 
 
 def predict_student_dropout(student_id):
