@@ -173,8 +173,8 @@ class RefreshTokenView(APIView):
     permission_classes = []
     authentication_classes = []
     
-    def post(self, request):
-        refresh_token = request.COOKIES.get('refresh_token')
+def post(self, request):
+        refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
         
         if not refresh_token:
             return Response(
@@ -2429,9 +2429,12 @@ class CreateCheckoutView(APIView):
             description=description,
         )
 
+        refresh = RefreshToken.for_user(request.user)
+
         return Response({
             'checkout_url': data['checkout_url'],
             'checkout_id': data['id'],
+            'refresh_token': str(refresh),
         })
 
 
