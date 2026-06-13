@@ -33,7 +33,7 @@ if CHARGILY_USE_TEST:
 else:
     CHARGILY_API_KEY = config('CHARGILY_PRIVATE')
     CHARGILY_BASE_URL = 'https://pay.chargily.net/api/v2'
-FRONTEND_URL = 'http://localhost:5173'
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 GOOGLE_OAUTH_CLIENT_ID = config('GOOGLE_OAUTH_CLIENT_ID')
 TWILIO_USE_TEST = True
 if TWILIO_USE_TEST:
