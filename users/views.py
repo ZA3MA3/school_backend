@@ -173,7 +173,7 @@ class RefreshTokenView(APIView):
     permission_classes = []
     authentication_classes = []
     
-def post(self, request):
+    def post(self, request):
         refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
         
         if not refresh_token:
