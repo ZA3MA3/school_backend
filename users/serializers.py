@@ -111,7 +111,7 @@ class ClassSerializer(serializers.ModelSerializer):
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
-    student_name = serializers.CharField(source='student.user.get_full_name', read_only=True)
+    student_name = serializers.CharField(source='student.get_full_name', read_only=True)
     class_name = serializers.CharField(source='class_teacher.class_obj.name', read_only=True)
     teacher_name = serializers.SerializerMethodField()
     
