@@ -13,7 +13,7 @@ from .views import (LoginView, LogoutView, CurrentUserView, RefreshTokenView,
                    GoogleAuthView, TeacherProfileCreateView, ParentStudentCreateView,
                    PhoneLoginSendView, PhoneLoginVerifyView, GoogleLoginOnlyView,
                    CreateCheckoutView, chargily_webhook, SubscriptionStatusView,
-                   AdminExercisesView, AdminExerciseModerationView)
+                   AdminExercisesView, AdminExerciseModerationView, HealthCheckView)
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
@@ -81,4 +81,6 @@ urlpatterns = [
     path('payments/checkout/', CreateCheckoutView.as_view(), name='create_checkout'),
     path('payments/webhook/', chargily_webhook, name='chargily_webhook'),
     path('payments/status/', SubscriptionStatusView.as_view(), name='subscription_status'),
+    # Health check
+    path('health/', HealthCheckView.as_view(), name='health_check'),
 ]

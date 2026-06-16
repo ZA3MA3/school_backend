@@ -2501,3 +2501,22 @@ def chargily_webhook(request):
 
     return JsonResponse({}, status=200)
 
+
+class HealthCheckView(APIView):
+    """
+    Health check endpoint to verify backend is ready
+    """
+    permission_classes = []
+
+    def get(self, request):
+        try:
+            return Response({
+                'status': 'healthy',
+
+            }, status=200)
+        except Exception as e:
+            return Response({
+                'status': 'unhealthy',
+                'error': str(e)
+            }, status=503)
+
