@@ -4,7 +4,6 @@ import logging
 from django.apps import AppConfig
 
 
-
 logger = logging.getLogger(__name__)
 
 # Global variables to store loaded model and artifacts
@@ -19,15 +18,17 @@ class UsersConfig(AppConfig):
     name = 'users'
 
     def ready(self):
-        #return
+        import threading
+        thread = threading.Thread(target=self._load_ml_models, daemon=True)
+        thread.start()
 
+    def _load_ml_models(self):
         global model, scaler, label_encoder, feature_names
-        
-        logger.info("Loading ML model artifacts...")
-        
-        # Get the path to the models directory
+
+        logger.info("Loading ML model artifacts in background...")
+
         models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
-        
+
         # Load the Keras model
         try:
             from tensorflow import keras
@@ -37,7 +38,7 @@ class UsersConfig(AppConfig):
         except Exception as e:
             logger.error(f"Error loading Keras model: {e}")
             model = None
-        
+
         # Load the scaler
         try:
             import joblib
@@ -47,7 +48,7 @@ class UsersConfig(AppConfig):
         except Exception as e:
             logger.error(f"Error loading scaler: {e}")
             scaler = None
-        
+
         # Load the label encoder
         try:
             import joblib
@@ -57,7 +58,7 @@ class UsersConfig(AppConfig):
         except Exception as e:
             logger.error(f"Error loading label encoder: {e}")
             label_encoder = None
-        
+
         # Load feature names
         try:
             feature_names_path = os.path.join(models_dir, 'feature_names.pkl')
@@ -67,9 +68,8 @@ class UsersConfig(AppConfig):
         except Exception as e:
             logger.error(f"Error loading feature names: {e}")
             feature_names = None
-        
-        logger.info("ML model artifacts loaded successfully")
 
+        logger.info("ML model artifacts loaded successfully")
 
 def predict_student_dropout(student_id):
     """

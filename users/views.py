@@ -1844,7 +1844,14 @@ class StudentPredictionView(APIView):
         
         if not can_view:
             return Response({'detail': 'You are not authorized to view this student\'s prediction'}, status=status.HTTP_403_FORBIDDEN)
-        
+
+        from .apps import model
+        if model is None:
+            return Response(
+                {'detail': 'Prediction model is still loading, please try again in a moment.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
         # Make prediction
         try:
             from .apps import predict_student_dropout
