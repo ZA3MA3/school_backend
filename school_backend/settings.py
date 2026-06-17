@@ -24,6 +24,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
+
+
 TEST_CHARGILY_PUBLIC=config('TEST_CHARGILY_PUBLIC')
 TEST_CHARGILY_PRIVATE=config('TEST_CHARGILY_PRIVATE')
 CHARGILY_USE_TEST = True
@@ -35,7 +37,7 @@ else:
     CHARGILY_BASE_URL = 'https://pay.chargily.net/api/v2'
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
-TWILIO_USE_TEST = True
+TWILIO_USE_TEST = False
 if TWILIO_USE_TEST:
     TWILIO_ACCOUNT_SID = config('TEST_TWILIO_ACCOUNT_SID')
     TWILIO_AUTH_TOKEN = config('TEST_TWILIO_AUTH_TOKEN')
@@ -66,7 +68,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'channels',
-    'users'
+    'users',
 ]
 
 MIDDLEWARE = [
